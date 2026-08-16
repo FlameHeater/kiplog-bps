@@ -1,20 +1,23 @@
 // Thin wrapper around Google Identity Services (GIS) — the only
 // third-party network dependency in this app, added deliberately at the
-// user's request (see docs/ASSUMPTIONS.md) to gate the app behind their own
-// Google account and let Drive act as the cross-device sync backend.
+// user's request (see docs/ASSUMPTIONS.md) to gate the app behind allowed
+// Google account(s) and let Drive act as the cross-device sync backend.
 //
 // Uses the OAuth2 token client (implicit, no server/redirect needed).
-// Scopes requested: `drive.appdata` for sync, plus `userinfo.email` — the
-// latter is required for the userinfo endpoint to return an email at all
-// (a token issued with only drive.appdata can't call it). Both are
-// "non-sensitive" scopes, so the OAuth consent screen never needs Google's
-// app-verification review as long as the app stays in "Testing" publish
-// status with the user's email as the sole test user (see setup
-// instructions given separately).
+// Scopes requested: full `drive` (not the narrower `drive.appdata`) because
+// more than one allowed account needs to read/write the SAME shared Drive
+// folder — appdata is private per-account and can't be shared between
+// accounts at all, which defeats multi-account sync. This is a "sensitive"
+// scope: Google shows an "unverified app" warning on the consent screen,
+// which is expected and fine as long as the app stays in "Testing" publish
+// status with every allowed email added as a test user (Testing mode never
+// requires Google's app-verification review, regardless of scope — only
+// "In production" status does). Plus `userinfo.email`, required for the
+// userinfo endpoint to return an email at all.
 
 const GIS_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
 const OAUTH_SCOPES = [
-  'https://www.googleapis.com/auth/drive.appdata',
+  'https://www.googleapis.com/auth/drive',
   'https://www.googleapis.com/auth/userinfo.email',
 ].join(' ');
 const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';

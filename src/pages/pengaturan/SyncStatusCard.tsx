@@ -53,8 +53,8 @@ export function SyncStatusCard() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Data disimpan di Google Drive akun ini (tersembunyi, khusus KipLog) supaya sama di semua perangkat Anda.
-          Jika dua perangkat diubah bersamaan, perubahan yang tersinkron paling akhir yang dipakai.
+          Data disimpan di folder Google Drive bersama supaya sama di semua akun dan perangkat Anda. Jika dua
+          perangkat diubah bersamaan, perubahan yang tersinkron paling akhir yang dipakai.
         </p>
       </CardContent>
     </Card>
