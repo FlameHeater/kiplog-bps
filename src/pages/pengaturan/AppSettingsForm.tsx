@@ -55,6 +55,7 @@ export function AppSettingsForm({ initial }: AppSettingsFormProps) {
       defaultEndTime: initial?.defaultEndTime ?? '16:00',
       defaultCountsTowardSkp: initial?.defaultCountsTowardSkp ?? true,
       theme: initial?.theme ?? 'system',
+      accentColor: initial?.accentColor ?? 'navy',
       maxFileSizeMb: initial?.maxFileSizeMb ?? 10,
       autoCompressImages: initial?.autoCompressImages ?? true,
       monthEndReminderDays,

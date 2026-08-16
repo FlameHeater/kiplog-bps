@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Plus, X } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { EmptyState } from '@/components/common/EmptyState';
+import { EmptyActivities } from '@/components/illustrations/EmptyActivities';
 import { Button } from '@/components/ui/button';
 import { ActivityCard } from '@/features/activities/ActivityCard';
 import { DeleteActivityDialog } from '@/features/activities/DeleteActivityDialog';
@@ -140,6 +141,7 @@ export function KegiatanPage() {
 
       {sorted.length === 0 ? (
         <EmptyState
+          illustration={<EmptyActivities />}
           title={chips.length > 0 ? 'Tidak ada hasil untuk filter ini.' : 'Belum ada kegiatan.'}
           action={
             chips.length > 0 ? (

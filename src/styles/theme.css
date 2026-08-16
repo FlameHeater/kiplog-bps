@@ -1,15 +1,24 @@
 /* §14.2 — self-hosted (CON-06/SEC-02: zero third-party network requests).
    Latin + latin-ext subsets only (Indonesian text): the default per-weight
    imports also pull cyrillic/greek/vietnamese subsets that would otherwise
-   bloat the PWA precache with files this app never needs. */
-@import '@fontsource/inter/latin-400.css';
-@import '@fontsource/inter/latin-ext-400.css';
-@import '@fontsource/inter/latin-500.css';
-@import '@fontsource/inter/latin-ext-500.css';
-@import '@fontsource/inter/latin-600.css';
-@import '@fontsource/inter/latin-ext-600.css';
-@import '@fontsource/inter/latin-700.css';
-@import '@fontsource/inter/latin-ext-700.css';
+   bloat the PWA precache with files this app never needs.
+
+   Lexend (headings) + Source Sans 3 (body) replace the previous Inter-for-
+   everything pairing — both are purpose-built for readability/accessibility,
+   fitting for a government-facing tool, while staying visually distinct
+   from the generic "every SaaS uses Inter" look. */
+@import '@fontsource/lexend/latin-500.css';
+@import '@fontsource/lexend/latin-ext-500.css';
+@import '@fontsource/lexend/latin-600.css';
+@import '@fontsource/lexend/latin-ext-600.css';
+@import '@fontsource/lexend/latin-700.css';
+@import '@fontsource/lexend/latin-ext-700.css';
+@import '@fontsource/source-sans-3/latin-400.css';
+@import '@fontsource/source-sans-3/latin-ext-400.css';
+@import '@fontsource/source-sans-3/latin-500.css';
+@import '@fontsource/source-sans-3/latin-ext-500.css';
+@import '@fontsource/source-sans-3/latin-600.css';
+@import '@fontsource/source-sans-3/latin-ext-600.css';
 @import '@fontsource/jetbrains-mono/latin-400.css';
 @import '@fontsource/jetbrains-mono/latin-ext-400.css';
 @import '@fontsource/jetbrains-mono/latin-500.css';
@@ -23,18 +32,24 @@
    can apply opacity modifiers via hsl(var(--x) / <alpha-value>). */
 @layer base {
   :root {
-    /* Subtly tinted (not pure white) so white cards read as elevated
-       surfaces without extra shadow weight — quick, low-risk depth cue. */
-    --background: 210 25% 97%;
-    --foreground: 222 47% 11%;
+    /* Navy + light-blue "Government/Public Service" palette (§ redesign
+       2026-08-17) — replaces the earlier plain shadcn-default blue. Subtly
+       tinted (not pure white) so white cards read as elevated surfaces
+       without extra shadow weight — quick, low-risk depth cue. */
+    --background: 210 40% 98%; /* #f8fafc */
+    --foreground: 222 84% 5%; /* #020617 */
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 222 84% 5%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 222 84% 5%;
 
-    --primary: 221 83% 53%; /* #2563eb */
+    /* "Navy" accent — the default of 5 accent choices in Pengaturan >
+       Tampilan (see the [data-accent="..."] blocks below). Each accent only
+       overrides primary/primary-foreground/ring so background/card/border
+       stay constant when a user switches accent. */
+    --primary: 222 47% 11%; /* #0f172a */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 210 40% 96%;
@@ -59,10 +74,62 @@
 
     --border: 214 32% 91%;
     --input: 214 32% 91%;
-    --ring: 221 83% 53%;
+    --ring: 222 47% 11%;
 
-    --radius-control: 6px;
+    --radius-control: 8px;
     --radius-card: 10px;
+  }
+
+  /* Accent overrides — Pengaturan > Tampilan lets a user pick one of these
+     five; only primary/primary-foreground/ring change so switching accent
+     never alters the base navy neutral palette above. "Navy" needs no block
+     of its own since it IS the :root/.dark default set above. Light-mode
+     hues are picked at a ~700 shade specifically so white primary-foreground
+     text clears 4.5:1 AA (same reasoning as the success/warning tokens
+     above); dark-mode hues use a brighter ~400 shade with dark-navy text,
+     mirroring the existing default dark-mode primary. */
+  [data-accent='teal'] {
+    --primary: 175 77% 26%; /* #0f766e */
+    --primary-foreground: 0 0% 100%;
+    --ring: 175 77% 26%;
+  }
+  .dark[data-accent='teal'] {
+    --primary: 172 66% 50%; /* #2dd4bf */
+    --primary-foreground: 222 47% 11%;
+    --ring: 172 66% 50%;
+  }
+
+  [data-accent='indigo'] {
+    --primary: 244 58% 51%; /* #4338ca */
+    --primary-foreground: 0 0% 100%;
+    --ring: 244 58% 51%;
+  }
+  .dark[data-accent='indigo'] {
+    --primary: 234 89% 74%; /* #818cf8 */
+    --primary-foreground: 222 47% 11%;
+    --ring: 234 89% 74%;
+  }
+
+  [data-accent='emerald'] {
+    --primary: 163 94% 24%; /* #047857 */
+    --primary-foreground: 0 0% 100%;
+    --ring: 163 94% 24%;
+  }
+  .dark[data-accent='emerald'] {
+    --primary: 158 64% 52%; /* #34d399 */
+    --primary-foreground: 222 47% 11%;
+    --ring: 158 64% 52%;
+  }
+
+  [data-accent='orange'] {
+    --primary: 17 88% 40%; /* #c2410c */
+    --primary-foreground: 0 0% 100%;
+    --ring: 17 88% 40%;
+  }
+  .dark[data-accent='orange'] {
+    --primary: 27 96% 61%; /* #fb923c */
+    --primary-foreground: 222 47% 11%;
+    --ring: 27 96% 61%;
   }
 
   .dark {
@@ -105,6 +172,10 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-semibold tracking-tight;
   }
 }
 

@@ -14,6 +14,7 @@ export const AppSettingsSchema = z.object({
   defaultEndTime: TimeStringSchema.default('16:00'),
   defaultCountsTowardSkp: z.boolean().default(true),
   theme: z.enum(['light', 'dark', 'system']).default('system'),
+  accentColor: z.enum(['navy', 'teal', 'indigo', 'emerald', 'orange']).default('navy'),
   maxFileSizeMb: z.number().default(10),
   autoCompressImages: z.boolean().default(true),
   monthEndReminderDays: z.number().int().default(5),

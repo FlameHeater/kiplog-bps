@@ -5,7 +5,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['"Source Sans 3"', 'system-ui', 'sans-serif'],
+        heading: ['Lexend', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       colors: {
@@ -47,7 +48,7 @@ export default {
         },
       },
       borderRadius: {
-        control: '6px',
+        control: '8px',
         card: '10px',
       },
       // NOTE: keys here must not match any `colors.*` theme key (e.g. "card") —
@@ -57,11 +58,15 @@ export default {
       boxShadow: {
         'elevation-1': '0 1px 2px 0 rgba(15, 23, 42, 0.04), 0 1px 3px 0 rgba(15, 23, 42, 0.06)',
         'elevation-2': '0 8px 20px -6px rgba(15, 23, 42, 0.12), 0 3px 8px -3px rgba(15, 23, 42, 0.08)',
-        'elevation-glow': '0 0 0 1px rgba(37, 99, 235, 0.12), 0 6px 20px -6px rgba(37, 99, 235, 0.35)',
+        // Driven by --primary so the glow follows whichever accent is active.
+        'elevation-glow': '0 0 0 1px hsl(var(--primary) / 0.12), 0 6px 20px -6px hsl(var(--primary) / 0.35)',
       },
       backgroundImage: {
-        'gradient-primary': 'linear-gradient(135deg, hsl(221 83% 53%) 0%, hsl(230 80% 48%) 100%)',
-        'gradient-subtle': 'linear-gradient(180deg, hsl(221 83% 53% / 0.06) 0%, transparent 100%)',
+        // Derived from --primary (not a literal color) so both light/dark
+        // mode and every accent choice in Pengaturan > Tampilan apply here
+        // automatically without a separate override block per accent.
+        'gradient-primary': 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.85) 100%)',
+        'gradient-subtle': 'linear-gradient(180deg, hsl(var(--primary) / 0.08) 0%, transparent 100%)',
       },
       fontSize: {
         xs: ['12px', '1.5'],

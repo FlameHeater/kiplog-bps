@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { EmptyState } from '@/components/common/EmptyState';
+import { EmptyEvidence } from '@/components/illustrations/EmptyEvidence';
 import { Button } from '@/components/ui/button';
 import { EvidenceDropzone } from '@/features/evidence/EvidenceDropzone';
 import { AddLinkEvidenceForm } from '@/features/evidence/AddLinkEvidenceForm';
@@ -109,7 +110,7 @@ export function EvidenceInboxPage() {
       ) : null}
 
       {tabItems.length === 0 ? (
-        <EmptyState title="Semua bukti dukung sudah ditautkan." />
+        <EmptyState illustration={<EmptyEvidence />} title="Semua bukti dukung sudah ditautkan." />
       ) : (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-6">
           {tabItems.map((item) => (

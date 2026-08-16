@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ProfileForm } from './pengaturan/ProfileForm';
 import { seedPerformancePlansIfEmpty } from '@/lib/services/seed-performance-plans';
 import { seedDefaultSettingsIfMissing } from '@/lib/services/seed-default-settings';
+import { WelcomeHero } from '@/components/illustrations/WelcomeHero';
 
 type Step = 'profile' | 'seed';
 
@@ -38,8 +39,9 @@ export function OnboardingPage() {
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4 py-12">
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-semibold">Selamat datang di KipLog</h1>
+      <div className="mb-6 flex flex-col items-center text-center">
+        <WelcomeHero />
+        <h1 className="mt-2 text-2xl font-semibold">Selamat datang di KipLog</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Catat pekerjaan sekali → kelola bukti dukung → hasilkan berkas Data Dukung → tempel ke
           KipApp.

@@ -22,6 +22,7 @@ export async function seedDefaultSettingsIfMissing(): Promise<void> {
     defaultEndTime: '16:00',
     defaultCountsTowardSkp: true,
     theme: 'system',
+    accentColor: 'navy',
     maxFileSizeMb: 10,
     autoCompressImages: true,
     monthEndReminderDays: 5,

@@ -4,6 +4,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { APP_VERSION } from '@/lib/version';
 import { ProfileForm } from './pengaturan/ProfileForm';
 import { AppSettingsForm } from './pengaturan/AppSettingsForm';
+import { ThemeForm } from './pengaturan/ThemeForm';
 
 export function PengaturanPage() {
   const profile = useUserProfile();
@@ -18,6 +19,7 @@ export function PengaturanPage() {
       <PageHeader title="Pengaturan" description="Profil dan preferensi aplikasi." />
       <div className="grid gap-6 md:grid-cols-2">
         <ProfileForm initial={profile ?? undefined} />
+        <ThemeForm initial={settings ?? undefined} />
         <AppSettingsForm initial={settings ?? undefined} />
       </div>
       <p className="mt-8 text-xs text-muted-foreground">KipLog BPS v{APP_VERSION}</p>

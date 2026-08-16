@@ -8,6 +8,7 @@ import { useAllEvidence } from '@/hooks/useAllEvidence';
 import { usePerformancePlans } from '@/hooks/usePerformancePlans';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useActivityModalStore } from '@/features/activities/activity-modal-store';
+import { NoSearchResults } from '@/components/illustrations/NoSearchResults';
 
 interface GlobalSearchDialogProps {
   open: boolean;
@@ -90,7 +91,10 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
           {debouncedQuery.trim() === '' ? (
             <p className="p-4 text-center text-sm text-muted-foreground">Ketik untuk mencari.</p>
           ) : results.length === 0 ? (
-            <p className="p-4 text-center text-sm text-muted-foreground">Tidak ada hasil untuk "{debouncedQuery}".</p>
+            <div className="flex flex-col items-center gap-2 p-6 text-center">
+              <NoSearchResults />
+              <p className="text-sm text-muted-foreground">Tidak ada hasil untuk "{debouncedQuery}".</p>
+            </div>
           ) : (
             Object.entries(grouped).map(([label, items]) =>
               items.length > 0 ? (

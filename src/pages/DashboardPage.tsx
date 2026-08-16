@@ -124,7 +124,15 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="-mx-4 -mt-6 rounded-b-card bg-gradient-subtle px-4 pb-6 pt-6 md:-mx-8 md:px-8">
+      <div className="relative -mx-4 -mt-6 overflow-hidden rounded-b-card bg-gradient-subtle px-4 pb-6 pt-6 md:-mx-8 md:px-8">
+        <svg
+          viewBox="0 0 200 120"
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-6 -top-10 h-40 w-40 opacity-70 md:h-48 md:w-48"
+        >
+          <circle cx="140" cy="40" r="70" fill="hsl(var(--primary) / 0.08)" />
+          <circle cx="100" cy="90" r="34" fill="hsl(var(--primary) / 0.06)" />
+        </svg>
         <PageHeader
           title={`${greeting()}${profile?.name ? `, ${profile.name}` : ''}`}
           description={`${MONTH_NAMES_ID[month - 1]} ${year} · Periode SKP ${skpPeriod}`}

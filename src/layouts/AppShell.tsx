@@ -6,6 +6,7 @@ import { BottomNav } from './BottomNav';
 import { Button } from '@/components/ui/button';
 import { useActivityModalStore } from '@/features/activities/activity-modal-store';
 import { StorageQuotaBanner } from '@/components/common/StorageQuotaBanner';
+import { ThemeToggleButton } from '@/components/common/ThemeToggleButton';
 import { GlobalSearchDialog } from '@/features/search/GlobalSearchDialog';
 
 // NFR-02/NFR-10 — ActivityFormModal pulls in react-hook-form, zod, and the
@@ -49,10 +50,13 @@ export function AppShell() {
             Cari…
             <kbd className="ml-auto rounded border border-border px-1 text-xs">Ctrl K</kbd>
           </button>
-          <Button onClick={() => openNew()}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Tambah Kegiatan
-          </Button>
+          <div className="flex items-center gap-2">
+            <ThemeToggleButton />
+            <Button onClick={() => openNew()}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Tambah Kegiatan
+            </Button>
+          </div>
         </header>
         <main className="flex-1 px-4 pb-20 pt-6 md:px-8 md:pb-6">
           <div className="mx-auto max-w-6xl">
