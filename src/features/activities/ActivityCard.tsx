@@ -1,8 +1,18 @@
 import { Paperclip, Link2, Link2Off, Copy, CalendarRange, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { Activity, PerformancePlan } from '@/types';
+import type { Activity, ActivityStatus, PerformancePlan } from '@/types';
 import { ACTIVITY_STATUS_LABELS } from './activity-status-labels';
 import { formatIndonesianDate } from '@/lib/date/date-utils';
+
+// Reuses the existing semantic tokens (no new hex colors) so status reads
+// consistently with success/warning/info used elsewhere in this file/app.
+const STATUS_BADGE_CLASS: Record<ActivityStatus, string> = {
+  draft: 'bg-muted text-muted-foreground',
+  complete: 'bg-info/15 text-info',
+  ready_to_report: 'bg-warning/15 text-warning',
+  reported: 'bg-success/15 text-success',
+  archived: 'bg-muted/60 text-muted-foreground/70',
+};
 
 interface ActivityCardProps {
   activity: Activity;
@@ -39,7 +49,9 @@ export function ActivityCard({
             <> · Jam tidak dicatat</>
           )}
         </p>
-        <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE_CLASS[activity.status]}`}
+        >
           {ACTIVITY_STATUS_LABELS[activity.status]}
         </span>
       </div>

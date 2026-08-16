@@ -14,6 +14,7 @@ import { formatIndonesianDate, todayString } from '@/lib/date/date-utils';
 import { downloadBlob } from '@/lib/utils/download-blob';
 import { recommendPerformancePlans } from '@/lib/matching/rk-matcher';
 import { recordRkSelection } from '@/lib/services/rk-selection';
+import { RkCombobox } from '@/features/performance-plans/RkCombobox';
 import {
   computeImportImpact,
   deleteAllData,
@@ -203,6 +204,34 @@ export function BackupPage() {
 
   function effectivePlanId(idx: number): string | null {
     return idx in pdfPlanOverrides ? pdfPlanOverrides[idx]! : (pdfAutoMatches[idx] ?? null);
+  }
+
+  // Selected drafts that never got an auto-match and haven't been set
+  // manually yet — the set a bulk-assign action should target.
+  const unmatchedIndices = useMemo(() => {
+    if (!pdfDrafts) return [];
+    return pdfDrafts
+      .map((_, idx) => idx)
+      .filter((idx) => {
+        if (!pdfSelected.has(idx)) return false;
+        const planId = idx in pdfPlanOverrides ? pdfPlanOverrides[idx] : (pdfAutoMatches[idx] ?? null);
+        return planId === null;
+      });
+  }, [pdfDrafts, pdfSelected, pdfAutoMatches, pdfPlanOverrides]);
+
+  const [bulkPlanId, setBulkPlanId] = useState<string | null>(null);
+
+  // Assign one chosen RK to every selected-but-unmatched row in one go,
+  // instead of the user opening each imported activity individually
+  // afterward — each row stays individually overridable via its own select.
+  function applyBulkPlan() {
+    if (!bulkPlanId || unmatchedIndices.length === 0) return;
+    setPdfPlanOverrides((prev) => {
+      const next = { ...prev };
+      for (const idx of unmatchedIndices) next[idx] = bulkPlanId;
+      return next;
+    });
+    setBulkPlanId(null);
   }
 
   async function confirmPdfImport() {
@@ -523,6 +552,19 @@ export function BackupPage() {
               <p className="text-sm">
                 {pdfSelected.size} dari {pdfDrafts.length} kegiatan dipilih untuk diimpor.
               </p>
+
+              {unmatchedIndices.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-control border border-warning/40 bg-warning/5 p-2 text-xs">
+                  <span className="text-warning">{unmatchedIndices.length} kegiatan belum ada RK.</span>
+                  <div className="w-56">
+                    <RkCombobox value={bulkPlanId} onChange={setBulkPlanId} />
+                  </div>
+                  <Button type="button" size="sm" variant="outline" disabled={!bulkPlanId} onClick={applyBulkPlan}>
+                    Terapkan ke semua
+                  </Button>
+                </div>
+              ) : null}
+
               <div className="max-h-72 overflow-y-auto rounded-card border border-border">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-card text-left text-muted-foreground">

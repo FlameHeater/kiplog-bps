@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -23,7 +23,8 @@ import { useSettings } from '@/hooks/useSettings';
 import { activityRepository, evidenceRepository } from '@/db/repositories';
 import { duplicateActivity } from '@/lib/services/duplicate-activity';
 import { getWorkdaysInMonth, countFilledWorkdays, calculateCoverage } from '@/lib/date/workdays';
-import { todayString } from '@/lib/date/date-utils';
+import { todayString, MONTH_NAMES_ID } from '@/lib/date/date-utils';
+import { MonthPicker } from '@/components/common/MonthPicker';
 import type { Activity } from '@/types';
 
 function greeting(): string {
@@ -34,11 +35,6 @@ function greeting(): string {
   return 'Selamat malam';
 }
 
-const MONTH_NAMES_ID = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
-];
-
 // FR-DSH-01…09 — the default landing page.
 export function DashboardPage() {
   const profile = useUserProfile();
@@ -47,14 +43,21 @@ export function DashboardPage() {
   const settings = useSettings();
 
   const today = todayString();
-  const year = Number(today.slice(0, 4));
-  const month = Number(today.slice(5, 7));
+  const [monthAnchor, setMonthAnchor] = useState(() => today.slice(0, 7));
+  const year = Number(monthAnchor.slice(0, 4));
+  const month = Number(monthAnchor.slice(5, 7));
   const skpPeriod = `${year}-${String(month).padStart(2, '0')}`;
+  const isCurrentMonth = monthAnchor === today.slice(0, 7);
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Activity | null>(null);
   const [deleteEvidenceCount, setDeleteEvidenceCount] = useState(0);
   const openEdit = useActivityModalStore((s) => s.openEdit);
+
+  // A day selected in one month shouldn't linger once a different month is chosen.
+  useEffect(() => {
+    setSelectedDate(null);
+  }, [monthAnchor]);
 
   const config = useMemo(
     () => ({ workdays: settings?.workdays ?? [1, 2, 3, 4, 5], holidays: settings?.holidays ?? [] }),
@@ -65,7 +68,9 @@ export function DashboardPage() {
     if (!activities || !plans) return null;
     const periodActivities = activities.filter((a) => a.skpPeriod === skpPeriod && a.status !== 'archived');
     const workdaysInMonth = getWorkdaysInMonth(year, month, config);
-    const workdaysUpToToday = getWorkdaysInMonth(year, month, config, today);
+    // A past/future month has no meaningful "so far" — only the real current
+    // month caps at today; any other selected month counts the whole month.
+    const workdaysUpToToday = getWorkdaysInMonth(year, month, config, isCurrentMonth ? today : undefined);
     const filledWorkdays = countFilledWorkdays(workdaysUpToToday, periodActivities.map((a) => a.date));
     const coverage = calculateCoverage(filledWorkdays, workdaysUpToToday.length);
     const emptyWorkdays = workdaysUpToToday.length - filledWorkdays;
@@ -92,7 +97,7 @@ export function DashboardPage() {
       readyCount: periodActivities.filter((a) => a.status === 'ready_to_report').length,
       missingLinkCount: periodActivities.filter((a) => !a.evidenceLink).length,
     };
-  }, [activities, plans, config, year, month, skpPeriod, today]);
+  }, [activities, plans, config, year, month, skpPeriod, today, isCurrentMonth]);
 
   const planById = useMemo(() => new Map((plans ?? []).map((p) => [p.id, p])), [plans]);
 
@@ -136,6 +141,7 @@ export function DashboardPage() {
         <PageHeader
           title={`${greeting()}${profile?.name ? `, ${profile.name}` : ''}`}
           description={`${MONTH_NAMES_ID[month - 1]} ${year} · Periode SKP ${skpPeriod}`}
+          actions={<MonthPicker value={monthAnchor} onChange={setMonthAnchor} />}
         />
       </div>
 
@@ -145,7 +151,11 @@ export function DashboardPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <StatTile label="Coverage" value={`${stats.coverage}%`} sub={`${stats.filledWorkdays}/${stats.workdaysUpToToday} hari kerja`} />
           <StatTile label="Hari Kerja" value={String(stats.workdaysInMonth)} sub="bulan ini" />
-          <StatTile label="Hari Terisi" value={String(stats.filledWorkdays)} sub="hingga hari ini" />
+          <StatTile
+            label="Hari Terisi"
+            value={String(stats.filledWorkdays)}
+            sub={isCurrentMonth ? 'hingga hari ini' : 'sebulan penuh'}
+          />
           <StatTile label="Hari Kosong" value={String(stats.emptyWorkdays)} warn={stats.emptyWorkdays > 0} />
           <StatTile label="Kegiatan" value={String(stats.totalActivities)} href="/kegiatan" />
           <StatTile label="Bukti Dukung" value={String(stats.totalEvidence)} />
@@ -165,7 +175,7 @@ export function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Kalender {MONTH_NAMES_ID[month - 1]}</CardTitle>
+            <CardTitle>Kalender {MONTH_NAMES_ID[month - 1]} {year}</CardTitle>
           </CardHeader>
           <CardContent>
             <MonthView

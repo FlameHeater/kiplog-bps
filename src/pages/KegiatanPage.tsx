@@ -23,7 +23,7 @@ import { usePerformancePlans } from '@/hooks/usePerformancePlans';
 import { useSettings } from '@/hooks/useSettings';
 import { activityRepository, evidenceRepository } from '@/db/repositories';
 import { monthRangeContaining } from '@/lib/reporting/report-period';
-import { Input } from '@/components/ui/input';
+import { MonthPicker } from '@/components/common/MonthPicker';
 import type { Activity } from '@/types';
 
 // FR-SCH-04/05/06.
@@ -99,13 +99,7 @@ export function KegiatanPage() {
         description={`${filtered.length} dari ${activities.length} kegiatan`}
         actions={
           <div className="flex gap-2">
-            <Input
-              type="month"
-              className="w-[10.5rem]"
-              aria-label="Filter bulan"
-              value={monthQuickValue}
-              onChange={(e) => setMonthQuick(e.target.value)}
-            />
+            <MonthPicker value={monthQuickValue} onChange={setMonthQuick} clearable />
             <FilterPanel filters={filters} onChange={setFilters} />
             <Button onClick={() => openNew()}>
               <Plus className="h-4 w-4" aria-hidden="true" />

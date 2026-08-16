@@ -17,6 +17,8 @@ import { activityRepository } from '@/db/repositories';
 import { formatIndonesianDate } from '@/lib/date/date-utils';
 import { generateDataDukungPdf } from '@/lib/reporting/pdf-data-dukung';
 import { buildReportFilename } from '@/lib/reporting/filename';
+import { monthRangeContaining } from '@/lib/reporting/report-period';
+import { MonthPicker } from '@/components/common/MonthPicker';
 import { groupEvidenceByActivity } from '@/lib/services/evidence-grouping';
 import { downloadBlob } from '@/lib/utils/download-blob';
 import type { Activity, EvidenceLinkStatus } from '@/types';
@@ -41,9 +43,11 @@ export function BuktiTautanPage() {
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [showGuidance, setShowGuidance] = useState(false);
   const [bulkPaste, setBulkPaste] = useState('');
+  const [sameLinkUrl, setSameLinkUrl] = useState('');
   const [linkValues, setLinkValues] = useState<Record<string, string>>({});
   const [linkErrors, setLinkErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [selectMonth, setSelectMonth] = useState('');
 
   const planById = useMemo(() => new Map((plans ?? []).map((p) => [p.id, p])), [plans]);
   const evidenceByActivityId = useMemo(() => groupEvidenceByActivity(evidence ?? []), [evidence]);
@@ -68,6 +72,16 @@ export function BuktiTautanPage() {
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelectedIds(next);
+  }
+
+  // Lets the user select a whole month's activities in one click instead of
+  // checking each card individually — the user's own example was "langsung
+  // satu bulan" (a whole month at once).
+  function selectAllInMonth() {
+    if (!selectMonth) return;
+    const { start, end } = monthRangeContaining(`${selectMonth}-01`);
+    const ids = (activities ?? []).filter((a) => a.date >= start && a.date <= end).map((a) => a.id);
+    setSelectedIds(new Set(ids));
   }
 
   // FR-LNK-02: one PDF per selected activity, then move each to 'packaged'.
@@ -98,7 +112,19 @@ export function BuktiTautanPage() {
     setLinkValues(initial);
     setLinkErrors({});
     setBulkPaste('');
+    setSameLinkUrl('');
     setLinkDialogOpen(true);
+  }
+
+  // Fills every selected row with the SAME url — for when one Drive
+  // folder/file link covers the whole batch, as opposed to applyBulkPaste
+  // below which expects one distinct url per row.
+  function applySameLinkToAll() {
+    const value = sameLinkUrl.trim();
+    if (!value) return;
+    const next = { ...linkValues };
+    for (const activity of selected) next[activity.id] = value;
+    setLinkValues(next);
   }
 
   // FR-LNK-04: pasting many URLs at once fills the rows in list order.
@@ -174,6 +200,14 @@ export function BuktiTautanPage() {
         />
       ) : (
         <>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Pilih cepat:</span>
+            <MonthPicker value={selectMonth} onChange={setSelectMonth} clearable />
+            <Button size="sm" variant="outline" disabled={!selectMonth} onClick={selectAllInMonth}>
+              Pilih semua di bulan ini
+            </Button>
+          </div>
+
           {selected.length > 0 ? (
             <div className="mb-4 flex flex-wrap items-center gap-2 rounded-card border border-border bg-secondary/50 p-3">
               <span className="text-sm font-medium">{selected.length} kegiatan dipilih</span>
@@ -270,7 +304,24 @@ export function BuktiTautanPage() {
           <div className="space-y-3">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">
-                Tempel banyak tautan sekaligus (satu baris per kegiatan, urutan sama seperti daftar di bawah)
+                Isi link yang sama untuk semua kegiatan terpilih (mis. satu folder Drive untuk sebulan)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={sameLinkUrl}
+                  onChange={(e) => setSameLinkUrl(e.target.value)}
+                  placeholder="https://drive.google.com/…"
+                  className="flex h-11 w-full rounded-control border border-input bg-background px-3 text-sm"
+                />
+                <Button type="button" variant="outline" onClick={applySameLinkToAll} disabled={!sameLinkUrl.trim()}>
+                  Terapkan ke semua
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">
+                Atau tempel tautan berbeda per baris (satu baris per kegiatan, urutan sama seperti daftar di bawah)
               </label>
               <Textarea
                 rows={3}

@@ -35,9 +35,14 @@ export function getWeekday(date: string): number {
   return parseDateString(date).getDay();
 }
 
-const MONTH_NAMES_ID = [
+export const MONTH_NAMES_ID = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+];
+
+export const MONTH_NAMES_ID_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
 ];
 
 /** "2026-08-02" -> "02 Agustus 2026" (§10.12.1/§13.1 report date style). */

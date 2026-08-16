@@ -7,6 +7,7 @@ import { ErrorBanner } from '@/components/common/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { MonthPicker } from '@/components/common/MonthPicker';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useActivities } from '@/hooks/useActivities';
 import { usePerformancePlans } from '@/hooks/usePerformancePlans';
@@ -170,7 +171,7 @@ export function LaporanPage() {
         {periodKind === 'bulanan' ? (
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Bulan</label>
-            <Input type="month" value={monthAnchor} onChange={(e) => setMonthAnchor(e.target.value)} />
+            <MonthPicker value={monthAnchor} onChange={setMonthAnchor} />
           </div>
         ) : null}
         {periodKind === 'custom' ? (
