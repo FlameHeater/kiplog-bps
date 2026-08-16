@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Archive, FileJson, FileSpreadsheet, FileText, Upload } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
@@ -8,9 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useSettings } from '@/hooks/useSettings';
 import { useActivities } from '@/hooks/useActivities';
+import { usePerformancePlans } from '@/hooks/usePerformancePlans';
 import { activityRepository } from '@/db/repositories';
 import { formatIndonesianDate, todayString } from '@/lib/date/date-utils';
 import { downloadBlob } from '@/lib/utils/download-blob';
+import { recommendPerformancePlans } from '@/lib/matching/rk-matcher';
+import { recordRkSelection } from '@/lib/services/rk-selection';
 import {
   computeImportImpact,
   deleteAllData,
@@ -60,6 +63,7 @@ export function BackupPage() {
   const [descriptionColumn, setDescriptionColumn] = useState<number | null>(null);
   const [reconciliation, setReconciliation] = useState<ReconciliationRow[] | null>(null);
 
+  const plans = usePerformancePlans();
   const pdfFileInputRef = useRef<HTMLInputElement>(null);
   const [pdfDrafts, setPdfDrafts] = useState<DraftActivity[] | null>(null);
   const [pdfSelected, setPdfSelected] = useState<Set<number>>(new Set());
@@ -67,6 +71,26 @@ export function BackupPage() {
   const [pdfParsing, setPdfParsing] = useState(false);
   const [pdfImporting, setPdfImporting] = useState(false);
   const [pdfImportedCount, setPdfImportedCount] = useState<number | null>(null);
+  // Extra terms the user supplies to help RK auto-matching for this batch
+  // (e.g. an RK's own keywords didn't cover this project's jargon yet).
+  const [pdfExtraKeywords, setPdfExtraKeywords] = useState('');
+  // Per-row manual override — undefined means "use the auto-match".
+  const [pdfPlanOverrides, setPdfPlanOverrides] = useState<Record<number, string | null>>({});
+
+  // FR-SRK — auto-match each draft to its best-scoring RK (score >= 35, per
+  // recommendPerformancePlans' own threshold) so the import doesn't leave
+  // everything unassigned; the select below still lets the user correct it
+  // per row before committing.
+  const pdfAutoMatches = useMemo<(string | null)[]>(() => {
+    if (!pdfDrafts || !plans) return [];
+    const extra = pdfExtraKeywords.trim();
+    return pdfDrafts.map((d) => {
+      const year = Number(d.date.slice(0, 4));
+      const searchText = extra ? `${d.description} ${extra}` : d.description;
+      const [top] = recommendPerformancePlans(searchText, plans, year);
+      return top?.plan.id ?? null;
+    });
+  }, [pdfDrafts, plans, pdfExtraKeywords]);
 
   async function handleExportJson() {
     setIsExporting('json');
@@ -151,6 +175,7 @@ export function BackupPage() {
     setPdfError(null);
     setPdfDrafts(null);
     setPdfImportedCount(null);
+    setPdfPlanOverrides({});
     setPdfParsing(true);
     try {
       const drafts = await parsePdfActivityFile(file);
@@ -176,14 +201,32 @@ export function BackupPage() {
     });
   }
 
+  function effectivePlanId(idx: number): string | null {
+    return idx in pdfPlanOverrides ? pdfPlanOverrides[idx]! : (pdfAutoMatches[idx] ?? null);
+  }
+
   async function confirmPdfImport() {
     if (!pdfDrafts) return;
     setPdfImporting(true);
     try {
-      const toImport = pdfDrafts.filter((_, idx) => pdfSelected.has(idx)).map(draftToActivity);
+      const startTime = settings?.defaultStartTime ?? '08:00';
+      const endTime = settings?.defaultEndTime ?? '16:00';
+      const planById = new Map((plans ?? []).map((p) => [p.id, p]));
+      const toImport = [];
+      for (const [idx, draft] of pdfDrafts.entries()) {
+        if (!pdfSelected.has(idx)) continue;
+        const performancePlanId = effectivePlanId(idx);
+        toImport.push(draftToActivity(draft, { startTime, endTime, performancePlanId }));
+        // FR-SRK-07/§12.1.4 — every RK assignment (auto or corrected) also
+        // reinforces usage stats and folds new description tokens into the
+        // plan's keywords, so later imports/recommendations get sharper.
+        const plan = performancePlanId ? planById.get(performancePlanId) : undefined;
+        if (plan) await recordRkSelection(plan, draft.description);
+      }
       await activityRepository.bulkAdd(toImport);
       setPdfImportedCount(toImport.length);
       setPdfDrafts(null);
+      setPdfPlanOverrides({});
       if (pdfFileInputRef.current) pdfFileInputRef.current.value = '';
     } finally {
       setPdfImporting(false);
@@ -438,8 +481,9 @@ export function BackupPage() {
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Unggah berkas PDF "Rincian Aktivitas" (mis. dari aplikasi presensi) untuk membuat draf kegiatan di
-            KipLog secara otomatis. Setiap kegiatan dibuat sebagai draf tanpa Rencana Kinerja — tautkan dan
-            lengkapi lewat halaman Kegiatan setelah diimpor.
+            KipLog secara otomatis. Progress diisi 100% dan capaian dibuat otomatis dari deskripsinya. Jam pada
+            laporan PDF tidak dipakai (setiap draf memakai jam kerja default dari Pengaturan) — sesuaikan jam per
+            kegiatan setelah diimpor bila perlu.
           </p>
           <div className="space-y-1.5">
             <Label htmlFor="pdf-activity-file">Pilih berkas PDF Rincian Aktivitas</Label>
@@ -464,6 +508,20 @@ export function BackupPage() {
 
           {pdfDrafts ? (
             <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="pdf-extra-keywords">Kata kunci tambahan (opsional)</Label>
+                <Input
+                  id="pdf-extra-keywords"
+                  placeholder="mis. sensus, pendataan, monev"
+                  value={pdfExtraKeywords}
+                  onChange={(e) => setPdfExtraKeywords(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Ditambahkan ke setiap deskripsi hanya untuk mencocokkan Rencana Kinerja secara otomatis — tidak
+                  ikut disimpan sebagai teks kegiatan.
+                </p>
+              </div>
+
               <p className="text-sm">
                 {pdfSelected.size} dari {pdfDrafts.length} kegiatan dipilih untuk diimpor.
               </p>
@@ -473,8 +531,8 @@ export function BackupPage() {
                     <tr>
                       <th className="px-2 py-1"></th>
                       <th className="px-2 py-1">Tanggal</th>
-                      <th className="px-2 py-1">Jam</th>
                       <th className="px-2 py-1">Deskripsi</th>
+                      <th className="px-2 py-1">Rencana Kinerja</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -489,10 +547,28 @@ export function BackupPage() {
                           />
                         </td>
                         <td className="whitespace-nowrap px-2 py-1">{d.date}</td>
-                        <td className="whitespace-nowrap px-2 py-1">
-                          {d.startTime}–{d.endTime}
-                        </td>
                         <td className="px-2 py-1">{d.description}</td>
+                        <td className="px-2 py-1">
+                          <select
+                            className="h-8 w-48 rounded-control border border-input bg-background px-1.5 text-xs"
+                            value={effectivePlanId(idx) ?? ''}
+                            onChange={(e) =>
+                              setPdfPlanOverrides((prev) => ({
+                                ...prev,
+                                [idx]: e.target.value === '' ? null : e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Belum dipilih</option>
+                            {(plans ?? [])
+                              .filter((p) => p.isActive && p.year === Number(d.date.slice(0, 4)))
+                              .map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.displayName ?? p.name}
+                                </option>
+                              ))}
+                          </select>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

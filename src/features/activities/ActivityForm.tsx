@@ -62,30 +62,47 @@ export function ActivityForm({
 
   const [achievementIsSuggested, setAchievementIsSuggested] = useState(false);
 
+  const computedDefaults = existing ?? {
+    date: prefillDate ?? new Date().toISOString().slice(0, 10),
+    startTime: settings?.defaultStartTime ?? '08:00',
+    endTime: settings?.defaultEndTime ?? '16:00',
+    description: '',
+    progress: 0,
+    achievement: '',
+    evidenceLink: null,
+    countsTowardSkp: settings?.defaultCountsTowardSkp ?? true,
+    performancePlanId: null,
+    location: '',
+    tags: [],
+    rbAreas: [],
+  };
   const {
     register,
     control,
     handleSubmit,
     watch,
     setValue,
-    formState: { errors, isSubmitting },
+    reset,
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<ActivityEditFormValues>({
     resolver: zodResolver(ActivityEditFormSchema),
-    defaultValues: existing ?? {
-      date: prefillDate ?? new Date().toISOString().slice(0, 10),
-      startTime: settings?.defaultStartTime ?? '08:00',
-      endTime: settings?.defaultEndTime ?? '16:00',
-      description: '',
-      progress: 0,
-      achievement: '',
-      evidenceLink: null,
-      countsTowardSkp: settings?.defaultCountsTowardSkp ?? true,
-      performancePlanId: null,
-      location: '',
-      tags: [],
-      rbAreas: [],
-    },
+    defaultValues: computedDefaults,
   });
+
+  // Belt-and-suspenders alongside the `defaultValues` option above: with
+  // this form nested inside a lazy-loaded modal behind a Suspense/loading
+  // gate, `useForm`'s initial defaultValues can end up applied before the
+  // registered <textarea>/<input> refs actually attach to their DOM nodes,
+  // so the (internally correct) form state never reaches the visible
+  // inputs — every field renders empty despite `existing` being right.
+  // `reset()` re-applies the values imperatively once mounted, closing
+  // that gap. Runs once per mount (this component gets a fresh `key` per
+  // activity in ActivityFormModal, so there's no risk of clobbering
+  // in-progress edits when switching activities).
+  useEffect(() => {
+    reset(computedDefaults);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const values = watch();
   const evidenceForChecklist = useEvidenceForActivity(savedId);
@@ -102,20 +119,25 @@ export function ActivityForm({
   // Dexie (not localStorage — ST-02 forbids domain data there) under a
   // stable id so it's recovered on reload even mid-edit.
   //
+  // Gated on isDirty (react-hook-form's real change-tracking), not a
+  // hand-rolled "empty description" heuristic — the old heuristic only
+  // protected brand-new activities. For an existing activity it always
+  // treated the form as touched, so if the form ever rendered even one
+  // tick with defaultValues that didn't match the real record (a remount
+  // race), autosave would silently overwrite the real data with blanks.
+  // isDirty is false until the user (or applyTemplate) actually changes a
+  // field, so an untouched form — correct or not — can never autosave.
+  //
   // Always re-reads the current DB row (not just the `existing` prop, which
   // is a snapshot from when the modal opened) before merging form values —
   // otherwise this `put()` would blindly overwrite evidenceCount/
   // evidenceLinkStatus that the Evidence Gallery updated out-of-band while
   // the form sat open (§9.6 fields must never regress from a stale save).
   useEffect(() => {
-    if (readOnly) return;
+    if (readOnly || !isDirty) return;
     const timer = setTimeout(() => {
       void (async () => {
         if (!values.date || !values.startTime || !values.endTime) return;
-        // Don't litter the calendar with empty drafts just because the modal
-        // was opened and closed without anything being typed.
-        const isUntouched = !existing && values.description.trim() === '';
-        if (isUntouched) return;
         const current = await activityRepository.get(draftIdRef.current);
         const activity = buildActivityFromForm(
           { ...values, evidenceLink: values.evidenceLink || null },
@@ -127,7 +149,7 @@ export function ActivityForm({
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(values), readOnly]);
+  }, [JSON.stringify(values), readOnly, isDirty]);
 
   async function onSubmit(formValues: ActivityEditFormValues) {
     const current = await activityRepository.get(draftIdRef.current);

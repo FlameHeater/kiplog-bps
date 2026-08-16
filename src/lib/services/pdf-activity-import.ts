@@ -1,5 +1,6 @@
 import type { Activity } from '@/types';
 import { deriveYearAndSkpPeriod, calculateDurationMinutes } from './activity-fields';
+import { generateAchievementSuggestions } from '@/lib/matching/achievement-generator';
 
 // Parses "Rincian Aktivitas" PDF exports (date / time / description /
 // coordinate table from a GPS attendance app) into draft KipLog activities.
@@ -57,40 +58,26 @@ export function parseActivityRows(rawText: string): ParsedActivityRow[] {
 
 export interface DraftActivity {
   date: string;
-  startTime: string;
-  endTime: string;
   description: string;
 }
 
-// Non-presence rows are the real work log; each one's own timestamp becomes
-// the activity's end time, and the day's first presence check-in (if any,
-// else a default) becomes its start time — the source has no finer-grained
-// timing than "logged at HH:MM", so every item from the same row shares one
-// window. Descriptions with multiple items ("A; B; C") become separate
-// draft activities so each can be reviewed/RK-matched independently.
+// Non-presence rows are the real work log. The PDF's own per-row timestamps
+// are just "when this line was logged" (usually near end-of-day), not a
+// meaningful start/end for each activity, so they're deliberately NOT
+// carried into KipLog — every draft gets one shared default time window
+// (see draftToActivity) that the user can adjust per activity after import.
+// Descriptions with multiple items ("A; B; C") become separate draft
+// activities so each can be reviewed/RK-matched independently.
 export function buildDraftActivities(rows: ParsedActivityRow[]): DraftActivity[] {
-  const firstPresenceByDate = new Map<string, string>();
-  for (const row of rows) {
-    if (row.isPresence && !firstPresenceByDate.has(row.date)) {
-      firstPresenceByDate.set(row.date, row.time);
-    }
-  }
-
   const drafts: DraftActivity[] = [];
   for (const row of rows) {
     if (row.isPresence || !row.description) continue;
-    let startTime = firstPresenceByDate.get(row.date) ?? '08:00';
-    if (startTime >= row.time) {
-      const [h, m] = row.time.split(':').map(Number) as [number, number];
-      const total = Math.max(0, h * 60 + m - 30);
-      startTime = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
-    }
     for (const item of row.description.split(';')) {
       // pdfjs's text extraction spaces out every hyphen it hits, including
       // inside compound words ("se-Provinsi" -> "se - Provinsi") — undo that
       // for anything that isn't a standalone dash between two words.
       const description = item.trim().replace(/(\S) - (\S)/g, '$1-$2');
-      if (description) drafts.push({ date: row.date, startTime, endTime: row.time, description });
+      if (description) drafts.push({ date: row.date, description });
     }
   }
   return drafts;
@@ -102,25 +89,36 @@ export async function parsePdfActivityFile(file: File): Promise<DraftActivity[]>
   return buildDraftActivities(rows);
 }
 
-export function draftToActivity(draft: DraftActivity): Activity {
+export interface DraftActivityConfig {
+  startTime: string;
+  endTime: string;
+  performancePlanId: string | null;
+}
+
+// FR-SCG: progress is always 100 (this is a historical log of completed
+// work), so the achievement suggestion always uses the "completed" template
+// — same generator used by the manual "Sarankan capaian" button.
+export function draftToActivity(draft: DraftActivity, config: DraftActivityConfig): Activity {
   const now = new Date().toISOString();
   const { year, skpPeriod } = deriveYearAndSkpPeriod(draft.date);
+  const [suggestion] = generateAchievementSuggestions(draft.description, 100);
+
   return {
     id: crypto.randomUUID(),
     date: draft.date,
-    startTime: draft.startTime,
-    endTime: draft.endTime,
+    startTime: config.startTime,
+    endTime: config.endTime,
     description: draft.description,
     progress: 100,
-    achievement: '',
+    achievement: suggestion?.text ?? '',
     evidenceLink: null,
     countsTowardSkp: true,
 
     year,
     skpPeriod,
-    performancePlanId: null,
+    performancePlanId: config.performancePlanId,
 
-    durationMinutes: calculateDurationMinutes(draft.startTime, draft.endTime),
+    durationMinutes: calculateDurationMinutes(config.startTime, config.endTime),
     status: 'draft',
     evidenceLinkStatus: 'none',
     tags: [],

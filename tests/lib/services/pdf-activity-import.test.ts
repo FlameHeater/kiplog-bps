@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseActivityRows, buildDraftActivities } from '@/lib/services/pdf-activity-import';
+import { parseActivityRows, buildDraftActivities, draftToActivity } from '@/lib/services/pdf-activity-import';
 
 // Sample mimics pdfjs's ACTUAL raw text extraction from the real source PDF
 // (verified against the real file in the browser): the date column wraps
@@ -52,21 +52,16 @@ describe('parseActivityRows', () => {
 });
 
 describe('buildDraftActivities', () => {
-  it('drops presence rows, splits multi-item descriptions, and windows time from check-in to log time', () => {
+  it('drops presence rows and splits multi-item descriptions, without carrying the PDF\'s own timestamps', () => {
     const rows = parseActivityRows(SAMPLE_TEXT);
     const drafts = buildDraftActivities(rows);
 
     expect(drafts).toHaveLength(4 + 2); // 4 items in day 1's row + 2 in day 2's row
-    expect(drafts.every((d) => d.startTime < d.endTime)).toBe(true);
+    expect(drafts.every((d) => !('startTime' in d) && !('endTime' in d))).toBe(true);
 
     const day1 = drafts.filter((d) => d.date === '2026-04-01');
     expect(day1).toHaveLength(4);
-    expect(day1[0]).toEqual({
-      date: '2026-04-01',
-      startTime: '07:26',
-      endTime: '16:36',
-      description: 'Menyimak Rilis BRS Provinsi Bali',
-    });
+    expect(day1[0]).toEqual({ date: '2026-04-01', description: 'Menyimak Rilis BRS Provinsi Bali' });
     expect(day1[3]!.description).toBe('Rapat Internal Indeks Pelayanan Publik (IPP)');
 
     // pdfjs also spaces out hyphens inside compound words; buildDraftActivities
@@ -81,9 +76,21 @@ describe('buildDraftActivities', () => {
     expect(day2).toHaveLength(2);
     expect(day2[0]).toEqual({
       date: '2026-04-02',
-      startTime: '07:25',
-      endTime: '16:06',
       description: 'Dokumentasi Upacara Piodalan di BPS Kabupaten Buleleng',
     });
+  });
+});
+
+describe('draftToActivity', () => {
+  it('applies the given time window/RK and auto-generates a completed-work achievement', () => {
+    const activity = draftToActivity(
+      { date: '2026-04-01', description: 'Melakukan Pemeriksaan Dokumen Survei Harga' },
+      { startTime: '08:00', endTime: '16:00', performancePlanId: 'plan-123' }
+    );
+    expect(activity.startTime).toBe('08:00');
+    expect(activity.endTime).toBe('16:00');
+    expect(activity.progress).toBe(100);
+    expect(activity.performancePlanId).toBe('plan-123');
+    expect(activity.achievement).toBe('Terselesaikannya Melakukan Pemeriksaan Dokumen Survei Harga');
   });
 });

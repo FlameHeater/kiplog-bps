@@ -25,7 +25,29 @@ export function ActivityFormModal() {
   const relevantDate = existing?.date ?? prefillDate ?? new Date().toISOString().slice(0, 10);
   const skpPeriod = useSkpPeriod(deriveSkpPeriod(relevantDate));
 
-  const loading = (editingId !== null && existing === undefined) || skpPeriod === undefined;
+  // useActivity's live query doesn't reset to `undefined` the instant
+  // `editingId` changes — closing the modal drives it to `null` (id=null),
+  // and reopening the SAME activity briefly keeps showing that stale
+  // `null` (not yet re-resolved) while `editingId` has already flipped
+  // back to the real id. Gating on `existing === undefined` alone missed
+  // this: `loading` went false one render too early, so ActivityForm
+  // mounted with `existing=null` and silently fell back to a blank
+  // "new activity" form for what the title still correctly called "Ubah
+  // Kegiatan". Require existing.id to actually match editingId before
+  // treating the query as settled.
+  // useActivity's live query doesn't reset to `undefined` the instant
+  // `editingId` changes — closing the modal drives it to `null` (id=null),
+  // and reopening the SAME activity briefly keeps showing that stale
+  // `null` (not yet re-resolved) while `editingId` has already flipped
+  // back to the real id. Gating on `existing === undefined` alone missed
+  // this: `loading` went false one render too early, so ActivityForm
+  // mounted with `existing=null` and silently fell back to a blank
+  // "new activity" form for what the title still correctly called "Ubah
+  // Kegiatan". Require existing.id to actually match editingId before
+  // treating the query as settled.
+  const loading =
+    (editingId !== null && (existing === undefined || existing === null || existing.id !== editingId)) ||
+    skpPeriod === undefined;
 
   // §9.4: sentForReview locks regardless of period state; a locked
   // SkpPeriod locks every activity in that period the same way.
@@ -42,6 +64,13 @@ export function ActivityFormModal() {
         </DialogHeader>
         {loading ? null : (
           <ActivityForm
+            // Force a full remount per activity: without this, opening a
+            // second activity's edit form while the modal instance is
+            // reused could leave react-hook-form's defaultValues/draftId
+            // (captured once at first mount) pointing at the PREVIOUS
+            // activity, and a stale autosave would silently overwrite the
+            // new one's real data with blank/default values.
+            key={editingId ?? 'new'}
             existing={existing ?? null}
             prefillDate={prefillDate}
             settings={settings ?? undefined}
