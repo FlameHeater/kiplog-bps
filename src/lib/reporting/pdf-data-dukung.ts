@@ -117,17 +117,31 @@ function buildFieldTable(
     ['NIP', profile.nip, false],
   ];
 
+  // Matches the office's own reference template (Template Data Dukung
+  // Laporan Kipapp.docx): each row gets a top border (a horizontal rule
+  // above every field), plus a closing bottom border under the last row —
+  // no vertical lines. Word gets this "for free" from its TableGrid style
+  // with only left/right/insideV switched off; pdfmake has no named table
+  // styles, so it's set explicitly per cell here.
+  const lastIndex = rows.length - 1;
   return {
     margin: [0, 0, 0, 10],
     table: {
       widths: [110, 10, '*'],
-      body: rows.map(([label, value, bold]) => [
-        { text: label, border: [false, false, false, false] },
-        { text: ':', border: [false, false, false, false] },
-        { text: value, bold, border: [false, false, false, false] },
-      ]),
+      body: rows.map(([label, value, bold], index) => {
+        const border: [boolean, boolean, boolean, boolean] = [false, true, false, index === lastIndex];
+        return [
+          { text: label, bold: true, border, margin: [0, 3, 0, 3] },
+          { text: ':', border, margin: [0, 3, 0, 3] },
+          { text: value, bold, border, margin: [0, 3, 0, 3] },
+        ];
+      }),
     },
-    layout: 'noBorders',
+    layout: {
+      hLineWidth: () => 0.75,
+      vLineWidth: () => 0,
+      hLineColor: () => '#000000',
+    },
   };
 }
 
