@@ -11,7 +11,7 @@ interface RequireAuthProps {
 // undefined/null/value shape: 'loading' -> null, signed-out/unauthorized ->
 // LoginPage, signed-in -> children.
 export function RequireAuth({ children }: RequireAuthProps) {
-  const { status, email, signIn, signOut } = useAuth();
+  const { status, email, error, signIn, signOut } = useAuth();
 
   useEffect(() => {
     if (status === 'signed-in') void pullOnStart();
@@ -24,6 +24,7 @@ export function RequireAuth({ children }: RequireAuthProps) {
       <LoginPage
         status={status}
         email={email}
+        error={error}
         onSignIn={() => void signIn()}
         onSignOut={signOut}
       />

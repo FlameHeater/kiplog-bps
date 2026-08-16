@@ -35,6 +35,7 @@ export type AuthStatus = 'loading' | 'signed-out' | 'unauthorized' | 'signed-in'
 interface AuthState {
   status: AuthStatus;
   email: string | null;
+  error: string | null;
   signIn: () => Promise<void>;
   signOut: () => void;
 }
@@ -49,6 +50,7 @@ const allowedEmail = (import.meta.env.VITE_ALLOWED_EMAIL ?? '').toLowerCase();
 export function useAuth(): AuthState {
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [email, setEmail] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -105,6 +107,7 @@ export function useAuth(): AuthState {
 
   const signIn = useCallback(async () => {
     setStatus('loading');
+    setError(null);
     try {
       const token = await requestSignIn();
       const verifiedEmail = await fetchAuthenticatedEmail(token);
@@ -117,7 +120,8 @@ export function useAuth(): AuthState {
         setEmail(verifiedEmail);
         setStatus('unauthorized');
       }
-    } catch {
+    } catch (err) {
+      setError((err as Error).message);
       setStatus('signed-out');
     }
   }, []);
@@ -126,8 +130,9 @@ export function useAuth(): AuthState {
     revokeGoogleSession();
     clearCache();
     setEmail(null);
+    setError(null);
     setStatus('signed-out');
   }, []);
 
-  return { status, email, signIn, signOut };
+  return { status, email, error, signIn, signOut };
 }

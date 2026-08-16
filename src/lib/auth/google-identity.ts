@@ -3,14 +3,20 @@
 // user's request (see docs/ASSUMPTIONS.md) to gate the app behind their own
 // Google account and let Drive act as the cross-device sync backend.
 //
-// Uses the OAuth2 token client (implicit, no server/redirect needed) with
-// the `drive.appdata` scope only — a "non-sensitive" scope, so the OAuth
-// consent screen never needs Google's app-verification review as long as
-// the app stays in "Testing" publish status with the user's email as the
-// sole test user (see setup instructions given separately).
+// Uses the OAuth2 token client (implicit, no server/redirect needed).
+// Scopes requested: `drive.appdata` for sync, plus `userinfo.email` — the
+// latter is required for the userinfo endpoint to return an email at all
+// (a token issued with only drive.appdata can't call it). Both are
+// "non-sensitive" scopes, so the OAuth consent screen never needs Google's
+// app-verification review as long as the app stays in "Testing" publish
+// status with the user's email as the sole test user (see setup
+// instructions given separately).
 
 const GIS_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+const OAUTH_SCOPES = [
+  'https://www.googleapis.com/auth/drive.appdata',
+  'https://www.googleapis.com/auth/userinfo.email',
+].join(' ');
 const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
 interface TokenResponse {
@@ -72,7 +78,7 @@ async function getTokenClient(): Promise<TokenClient> {
 
   tokenClient = window.google!.accounts.oauth2.initTokenClient({
     client_id: clientId,
-    scope: DRIVE_SCOPE,
+    scope: OAUTH_SCOPES,
     callback: () => {}, // overridden per-call in requestAccessToken()
   });
   return tokenClient;
@@ -84,7 +90,7 @@ export async function requestSignIn(): Promise<string> {
   return new Promise((resolve, reject) => {
     window.google!.accounts.oauth2.initTokenClient({
       client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-      scope: DRIVE_SCOPE,
+      scope: OAUTH_SCOPES,
       callback: (response) => {
         if (response.error || !response.access_token) {
           reject(new Error('Login Google dibatalkan atau gagal.'));
@@ -106,7 +112,7 @@ export async function requestSilentToken(): Promise<string | null> {
     return await new Promise((resolve) => {
       window.google!.accounts.oauth2.initTokenClient({
         client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-        scope: DRIVE_SCOPE,
+        scope: OAUTH_SCOPES,
         callback: (response) => {
           if (response.error || !response.access_token) {
             resolve(null);

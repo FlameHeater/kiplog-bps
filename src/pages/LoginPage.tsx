@@ -5,13 +5,14 @@ import type { AuthStatus } from '@/hooks/useAuth';
 interface LoginPageProps {
   status: Extract<AuthStatus, 'signed-out' | 'unauthorized'>;
   email: string | null;
+  error: string | null;
   onSignIn: () => void;
   onSignOut: () => void;
 }
 
 // The only screen reachable without a verified, allow-listed Google
 // session — see src/components/common/RequireAuth.tsx.
-export function LoginPage({ status, email, onSignIn, onSignOut }: LoginPageProps) {
+export function LoginPage({ status, email, error, onSignIn, onSignOut }: LoginPageProps) {
   return (
     <div className="mx-auto flex min-h-dvh max-w-sm flex-col items-center justify-center gap-4 px-4 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -32,6 +33,7 @@ export function LoginPage({ status, email, onSignIn, onSignOut }: LoginPageProps
             Aplikasi ini dikunci untuk satu akun Google saja. Masuk untuk melanjutkan.
           </p>
           <Button onClick={onSignIn}>Masuk dengan Google</Button>
+          {error ? <p className="text-xs text-destructive">Gagal masuk: {error}</p> : null}
         </>
       )}
     </div>
