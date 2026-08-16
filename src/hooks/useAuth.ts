@@ -40,13 +40,24 @@ interface AuthState {
   signOut: () => void;
 }
 
-const allowedEmail = (import.meta.env.VITE_ALLOWED_EMAIL ?? '').toLowerCase();
+// Comma-separated so more than one Google account can be trusted (e.g. a
+// personal + work account) — each one must ALSO be added as a test user in
+// the Google Cloud OAuth consent screen, or Google rejects it before this
+// check ever runs (see docs/ASSUMPTIONS.md).
+const allowedEmails = (import.meta.env.VITE_ALLOWED_EMAIL ?? '')
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
 
-// Gate identity: only `allowedEmail` may ever reach `signed-in`. A cached
-// verification lets the app open offline after the first real login (see
-// docs/ASSUMPTIONS.md) — a live Google round-trip on every open would lock
-// the user out of their own offline data, which defeats the point of this
-// being an offline-first app.
+function isAllowed(email: string): boolean {
+  return allowedEmails.includes(email.toLowerCase());
+}
+
+// Gate identity: only an email in `allowedEmails` may ever reach
+// `signed-in`. A cached verification lets the app open offline after the
+// first real login (see docs/ASSUMPTIONS.md) — a live Google round-trip on
+// every open would lock the user out of their own offline data, which
+// defeats the point of this being an offline-first app.
 export function useAuth(): AuthState {
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [email, setEmail] = useState<string | null>(null);
@@ -56,14 +67,14 @@ export function useAuth(): AuthState {
     let cancelled = false;
 
     async function bootstrap() {
-      if (!allowedEmail) {
+      if (allowedEmails.length === 0) {
         // Misconfiguration — fail closed, not open.
         if (!cancelled) setStatus('unauthorized');
         return;
       }
 
       const cache = readCache();
-      if (cache && cache.email.toLowerCase() === allowedEmail) {
+      if (cache && isAllowed(cache.email)) {
         if (!cancelled) {
           setEmail(cache.email);
           setStatus('signed-in');
@@ -86,7 +97,7 @@ export function useAuth(): AuthState {
       try {
         const verifiedEmail = await fetchAuthenticatedEmail(token);
         if (cancelled) return;
-        if (verifiedEmail.toLowerCase() === allowedEmail) {
+        if (isAllowed(verifiedEmail)) {
           writeCache(verifiedEmail);
           setEmail(verifiedEmail);
           setStatus('signed-in');
@@ -111,7 +122,7 @@ export function useAuth(): AuthState {
     try {
       const token = await requestSignIn();
       const verifiedEmail = await fetchAuthenticatedEmail(token);
-      if (verifiedEmail.toLowerCase() === allowedEmail) {
+      if (isAllowed(verifiedEmail)) {
         writeCache(verifiedEmail);
         setEmail(verifiedEmail);
         setStatus('signed-in');
