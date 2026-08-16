@@ -124,10 +124,12 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`${greeting()}${profile?.name ? `, ${profile.name}` : ''}`}
-        description={`${MONTH_NAMES_ID[month - 1]} ${year} · Periode SKP ${skpPeriod}`}
-      />
+      <div className="-mx-4 -mt-6 rounded-b-card bg-gradient-subtle px-4 pb-6 pt-6 md:-mx-8 md:px-8">
+        <PageHeader
+          title={`${greeting()}${profile?.name ? `, ${profile.name}` : ''}`}
+          description={`${MONTH_NAMES_ID[month - 1]} ${year} · Periode SKP ${skpPeriod}`}
+        />
+      </div>
 
       <AlertPanel />
 
@@ -237,14 +239,24 @@ interface StatTileProps {
 // FR-DSH-09 — clickable summary numbers open a filtered list.
 function StatTile({ label, value, sub, href, warn }: StatTileProps) {
   const content = (
-    <div className="rounded-card border border-border bg-card p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`font-mono text-xl font-semibold ${warn ? 'text-warning' : ''}`}>{value}</p>
-      {sub ? <p className="text-[11px] text-muted-foreground">{sub}</p> : null}
+    <div
+      className={`group relative overflow-hidden rounded-card border border-border/60 bg-card p-3 shadow-elevation-1 transition-all duration-200 ${
+        href ? 'hover:-translate-y-0.5 hover:shadow-elevation-2' : ''
+      }`}
+    >
+      <span
+        className={`absolute inset-y-0 left-0 w-1 rounded-l-card ${warn ? 'bg-warning' : 'bg-primary/70'}`}
+        aria-hidden="true"
+      />
+      <p className="pl-1.5 text-xs font-medium text-muted-foreground">{label}</p>
+      <p className={`pl-1.5 font-mono text-2xl font-bold tracking-tight ${warn ? 'text-warning' : 'text-foreground'}`}>
+        {value}
+      </p>
+      {sub ? <p className="pl-1.5 text-[11px] text-muted-foreground">{sub}</p> : null}
     </div>
   );
   return href ? (
-    <Link to={href} className="block transition-opacity hover:opacity-80">
+    <Link to={href} className="block">
       {content}
     </Link>
   ) : (

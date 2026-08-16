@@ -8,12 +8,15 @@ export function Sidebar() {
   const unassignedCount = useUnassignedEvidenceCount();
 
   return (
-    <aside className="hidden shrink-0 border-r border-border bg-card md:flex md:w-16 md:flex-col xl:w-60">
-      <div className="flex h-16 items-center justify-center px-2 text-lg font-semibold xl:justify-start xl:px-6">
-        <span className="xl:hidden" aria-hidden="true">
+    <aside className="hidden shrink-0 border-r border-border/60 bg-card md:flex md:w-16 md:flex-col xl:w-60">
+      <div className="flex h-16 items-center justify-center gap-2 px-2 xl:justify-start xl:px-6">
+        <span
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-gradient-primary text-sm font-bold text-primary-foreground shadow-sm"
+          aria-hidden="true"
+        >
           K
         </span>
-        <span className="hidden xl:inline">KipLog</span>
+        <span className="hidden text-lg font-semibold tracking-tight xl:inline">KipLog</span>
       </div>
       <nav className="flex-1 space-y-1 px-2 xl:px-3">
         {NAV_ITEMS.map((item) => (
@@ -25,9 +28,9 @@ export function Sidebar() {
             aria-label={item.label}
             className={({ isActive }) =>
               cn(
-                'flex items-center justify-center gap-3 rounded-control px-2 py-2 text-sm font-medium transition-colors xl:justify-start xl:px-3',
+                'relative flex items-center justify-center gap-3 rounded-control px-2 py-2 text-sm font-medium transition-colors xl:justify-start xl:px-3',
                 isActive
-                  ? 'bg-primary/10 text-primary'
+                  ? 'bg-primary/10 text-primary before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:rounded-full before:bg-primary xl:before:content-[""]'
                   : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
               )
             }

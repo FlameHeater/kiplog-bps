@@ -50,6 +50,19 @@ export default {
         control: '6px',
         card: '10px',
       },
+      // NOTE: keys here must not match any `colors.*` theme key (e.g. "card") —
+      // Tailwind's box-shadow plugin resolves a same-named color token as the
+      // shadow's color instead of using the literal value, silently turning
+      // it white. Use elevation-tier names instead.
+      boxShadow: {
+        'elevation-1': '0 1px 2px 0 rgba(15, 23, 42, 0.04), 0 1px 3px 0 rgba(15, 23, 42, 0.06)',
+        'elevation-2': '0 8px 20px -6px rgba(15, 23, 42, 0.12), 0 3px 8px -3px rgba(15, 23, 42, 0.08)',
+        'elevation-glow': '0 0 0 1px rgba(37, 99, 235, 0.12), 0 6px 20px -6px rgba(37, 99, 235, 0.35)',
+      },
+      backgroundImage: {
+        'gradient-primary': 'linear-gradient(135deg, hsl(221 83% 53%) 0%, hsl(230 80% 48%) 100%)',
+        'gradient-subtle': 'linear-gradient(180deg, hsl(221 83% 53% / 0.06) 0%, transparent 100%)',
+      },
       fontSize: {
         xs: ['12px', '1.5'],
         sm: ['14px', '1.5'],
