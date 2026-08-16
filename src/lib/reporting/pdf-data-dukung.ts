@@ -1,6 +1,8 @@
 import { formatIndonesianDate } from '@/lib/date/date-utils';
 import { RbAreaSchema } from '@/lib/validation/enums';
 import type { Activity, Evidence, PerformancePlan, UserProfile } from '@/types';
+import logoBpsUrl from '@/assets/logo-bps.png';
+import logoRbUrl from '@/assets/logo-rb.png';
 
 const RB_AREAS = RbAreaSchema.options;
 // A4 width (595pt) minus 2cm margins each side (~56.7pt) minus a little table padding.
@@ -67,22 +69,36 @@ function rbCheckboxRow(label: string, checked: boolean): Record<string, unknown>
   };
 }
 
-function blankLogoBox(): Record<string, unknown> {
-  // "jika tidak ada, sisakan ruang kosong tanpa merusak tata letak" — an
-  // invisible rect reserves the exact same layout space as a real logo.
-  return { canvas: [{ type: 'rect', x: 0, y: 0, w: 60, h: 60, lineWidth: 0 }] };
+// The office's own Word template (Template Data Dukung Laporan
+// Kipapp.docx) embeds its kop as one flattened image containing both
+// logos; these two PNGs are that same image cropped to just the logo
+// regions (Reformasi Birokrasi has no per-profile source in KipLog's
+// schema, but the official artwork itself isn't user-specific data, so
+// it's bundled as a static asset rather than left blank).
+let officialLogosPromise: Promise<{ bps: string; rb: string }> | null = null;
+async function loadOfficialLogos(): Promise<{ bps: string; rb: string }> {
+  officialLogosPromise ??= Promise.all([
+    fetch(logoBpsUrl).then((r) => r.blob()).then(blobToDataUrl),
+    fetch(logoRbUrl).then((r) => r.blob()).then(blobToDataUrl),
+  ]).then(([bps, rb]) => ({ bps, rb }));
+  return officialLogosPromise;
 }
 
-function buildKop(activity: Activity, profile: UserProfile): Record<string, unknown> {
+async function buildKop(activity: Activity, profile: UserProfile): Promise<Record<string, unknown>> {
   const checked = new Set(activity.rbAreas);
   const leftAreas = RB_AREAS.slice(0, 4);
   const rightAreas = RB_AREAS.slice(4, 8);
-  const logoBox = profile.logoDataUrl ? { image: profile.logoDataUrl, width: 60, height: 60 } : blankLogoBox();
+  const officialLogos = await loadOfficialLogos();
+  // A user-uploaded unit logo (different BPS Kabupaten/Kota offices may
+  // use their own variant) takes priority; the official BPS artwork is
+  // the default rather than a blank box now that we have it.
+  const leftLogoSrc = profile.logoDataUrl ?? officialLogos.bps;
+  const leftLogoBox = { image: leftLogoSrc, width: 60, height: 60 };
 
   return {
     columnGap: 8,
     columns: [
-      { width: 60, stack: [logoBox] },
+      { width: 60, stack: [leftLogoBox] },
       {
         width: '*',
         margin: [8, 0, 8, 0],
@@ -92,10 +108,7 @@ function buildKop(activity: Activity, profile: UserProfile): Record<string, unkn
           { width: '*', stack: rightAreas.map((area) => rbCheckboxRow(area, checked.has(area))) },
         ],
       },
-      // Zona Integritas logo has no data source in KipLog's schema (single
-      // UserProfile.logoDataUrl slot is used for the left/unit logo) — left
-      // permanently blank per the same "no fake logo" rule (see ASSUMPTIONS.md).
-      { width: 60, stack: [blankLogoBox()] },
+      { width: 60, stack: [{ image: officialLogos.rb, width: 60, height: 60 }] },
     ],
   };
 }
@@ -195,9 +208,10 @@ async function buildActivitySection(item: PdfActivityInput, profile: UserProfile
   const { activity, plan, evidence } = item;
   const dateRange = `${formatIndonesianDate(activity.date)} - ${formatIndonesianDate(activity.date)}`;
   const evidenceContent = await buildEvidenceContent(evidence);
+  const kop = await buildKop(activity, profile);
 
   return [
-    buildKop(activity, profile),
+    kop,
     { text: 'Data Dukung Laporan Kegiatan', bold: true, fontSize: 13, alignment: 'center', margin: [0, 12, 0, 12] },
     buildFieldTable(activity, plan, profile, dateRange),
     {
