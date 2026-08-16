@@ -163,6 +163,17 @@ export function ActivityForm({
   // autosave and explicit submit below — autosave used to skip this
   // entirely, so an activity edited only via autosave (never re-submitted)
   // could stay stuck on a stale status indefinitely.
+  //
+  // When not ready, the result is 'draft' or 'complete' depending on WHICH
+  // checks are failing: if the activity's own core content (date/time/RK/
+  // description/achievement/progress) is intact and only the report-
+  // readiness extras (evidence/link/period lock) are missing, 'complete' is
+  // accurate — the activity itself is done, it just isn't reportable yet.
+  // But if core content is missing (e.g. the user cleared the description),
+  // 'complete' would overstate it — that's 'draft'. Previously EVERY
+  // not-ready activity landed on 'complete', so clearing core data never
+  // sent a heavily-edited activity back to 'draft' the way a user expects.
+  const CORE_CONTENT_FIELDS = new Set(['date', 'startTime', 'performancePlanId', 'description', 'achievement', 'progress']);
   function withRecomputedStatus(activity: Activity): Activity {
     if (activity.status !== 'draft' && activity.status !== 'complete' && activity.status !== 'ready_to_report') {
       return activity;
@@ -188,7 +199,11 @@ export function ActivityForm({
         periodLocked: skpPeriodForChecklist?.isLocked ?? false,
       }
     );
-    return { ...activity, status: validation.isReady ? 'ready_to_report' : 'complete' };
+    if (validation.isReady) return { ...activity, status: 'ready_to_report' };
+    const coreContentOk = validation.checks
+      .filter((c) => CORE_CONTENT_FIELDS.has(c.field))
+      .every((c) => c.passed);
+    return { ...activity, status: coreContentOk ? 'complete' : 'draft' };
   }
 
   async function onSubmit(formValues: ActivityEditFormValues) {
