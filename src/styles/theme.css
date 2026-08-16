@@ -1,0 +1,127 @@
+/* §14.2 — self-hosted (CON-06/SEC-02: zero third-party network requests).
+   Latin + latin-ext subsets only (Indonesian text): the default per-weight
+   imports also pull cyrillic/greek/vietnamese subsets that would otherwise
+   bloat the PWA precache with files this app never needs. */
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-ext-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-ext-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-ext-600.css';
+@import '@fontsource/inter/latin-700.css';
+@import '@fontsource/inter/latin-ext-700.css';
+@import '@fontsource/jetbrains-mono/latin-400.css';
+@import '@fontsource/jetbrains-mono/latin-ext-400.css';
+@import '@fontsource/jetbrains-mono/latin-500.css';
+@import '@fontsource/jetbrains-mono/latin-ext-500.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens — PRD §14.2. HSL triplets (no `hsl()` wrapper) so Tailwind
+   can apply opacity modifiers via hsl(var(--x) / <alpha-value>). */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 221 83% 53%; /* #2563eb */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 72% 51%; /* #dc2626 */
+    --destructive-foreground: 0 0% 100%;
+
+    /* success/warning darkened from PRD §14.2's literal #16a34a/#d97706 — those
+       fail WCAG AA (4.5:1) as text color on white (3.9:1 / 3.2:1 measured).
+       Darkened just enough to pass 4.5:1 while staying recognizably green/amber;
+       still used as-is for badges/borders/icons where only 3:1 applies. */
+    --success: 142 71% 30%; /* #16833e */
+    --warning: 32 95% 34%; /* #a95c04 */
+    --info: 199 89% 41%; /* #0284c7 */
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+
+    --radius-control: 6px;
+    --radius-card: 10px;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 96%;
+
+    --card: 222 40% 11%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 222 40% 11%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 96%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 96%;
+
+    --destructive: 0 63% 54%;
+    --destructive-foreground: 210 40% 96%;
+
+    --success: 142 64% 45%;
+    --warning: 32 90% 55%;
+    --info: 199 80% 55%;
+
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 217 91% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+/* FR-RPT-07: printable HTML report — hide app chrome, keep only .print-area. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+}

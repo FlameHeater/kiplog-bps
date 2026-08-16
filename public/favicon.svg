@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- KipLog BPS favicon — same mark as icons.svg, simplified for small sizes. -->
+  <rect width="512" height="512" rx="96" fill="#2563eb"/>
+  <rect x="216" y="102" width="80" height="40" rx="10" fill="#ffffff"/>
+  <rect x="146" y="130" width="220" height="270" rx="28" fill="#ffffff"/>
+  <path d="M198 265 L240 310 L326 205" fill="none" stroke="#2563eb" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
