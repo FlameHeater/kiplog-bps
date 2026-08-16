@@ -12,7 +12,7 @@ import { useActivities } from '@/hooks/useActivities';
 import { usePerformancePlans } from '@/hooks/usePerformancePlans';
 import { useAllEvidence } from '@/hooks/useAllEvidence';
 import { useUserProfile } from '@/hooks/useUserProfile';
-import { formatDateString, formatIndonesianDate } from '@/lib/date/date-utils';
+import { formatDateString, formatIndonesianDate, todayString } from '@/lib/date/date-utils';
 import { buildReportPeriod, REPORT_PERIOD_LABELS, type ReportPeriodKind } from '@/lib/reporting/report-period';
 import { buildReportFilename, periodToFilenameSegment } from '@/lib/reporting/filename';
 import { generateDataDukungPdf } from '@/lib/reporting/pdf-data-dukung';
@@ -39,14 +39,15 @@ export function LaporanPage() {
   );
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [monthAnchor, setMonthAnchor] = useState(() => todayString().slice(0, 7));
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
   const [showPrint, setShowPrint] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const period = useMemo(
-    () => buildReportPeriod(periodKind, { start: customStart, end: customEnd }),
-    [periodKind, customStart, customEnd]
+    () => buildReportPeriod(periodKind, { start: customStart, end: customEnd }, monthAnchor),
+    [periodKind, customStart, customEnd, monthAnchor]
   );
 
   const planById = useMemo(() => new Map((plans ?? []).map((p) => [p.id, p])), [plans]);
@@ -166,6 +167,12 @@ export function LaporanPage() {
             </SelectContent>
           </Select>
         </div>
+        {periodKind === 'bulanan' ? (
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Bulan</label>
+            <Input type="month" value={monthAnchor} onChange={(e) => setMonthAnchor(e.target.value)} />
+          </div>
+        ) : null}
         {periodKind === 'custom' ? (
           <>
             <div className="space-y-1.5">

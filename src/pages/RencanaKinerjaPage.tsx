@@ -3,6 +3,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { Button } from '@/components/ui/button';
 import { usePerformancePlans } from '@/hooks/usePerformancePlans';
 import { seedPerformancePlansIfEmpty } from '@/lib/services/seed-performance-plans';
+import { KeywordEditor } from '@/features/performance-plans/KeywordEditor';
 import type { PerformancePlan } from '@/types';
 
 function groupByTeam(plans: PerformancePlan[]): Map<string, PerformancePlan[]> {
@@ -72,6 +73,7 @@ export function RencanaKinerjaPage() {
                         RK Atasan: {plan.parentPlanName}
                       </p>
                     ) : null}
+                    <KeywordEditor plan={plan} />
                   </li>
                 ))}
             </ul>

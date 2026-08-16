@@ -82,13 +82,14 @@ describe('buildDraftActivities', () => {
 });
 
 describe('draftToActivity', () => {
-  it('applies the given time window/RK and auto-generates a completed-work achievement', () => {
+  it('leaves time unrecorded (the PDF\'s own timestamps are log times, not activity times), applies RK, and auto-generates a completed-work achievement', () => {
     const activity = draftToActivity(
       { date: '2026-04-01', description: 'Melakukan Pemeriksaan Dokumen Survei Harga' },
-      { startTime: '08:00', endTime: '16:00', performancePlanId: 'plan-123' }
+      { performancePlanId: 'plan-123' }
     );
-    expect(activity.startTime).toBe('08:00');
-    expect(activity.endTime).toBe('16:00');
+    expect(activity.startTime).toBe('');
+    expect(activity.endTime).toBe('');
+    expect(activity.durationMinutes).toBe(0);
     expect(activity.progress).toBe(100);
     expect(activity.performancePlanId).toBe('plan-123');
     expect(activity.achievement).toBe('Terselesaikannya Melakukan Pemeriksaan Dokumen Survei Harga');

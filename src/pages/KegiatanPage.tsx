@@ -21,6 +21,8 @@ import { useActivities } from '@/hooks/useActivities';
 import { usePerformancePlans } from '@/hooks/usePerformancePlans';
 import { useSettings } from '@/hooks/useSettings';
 import { activityRepository, evidenceRepository } from '@/db/repositories';
+import { monthRangeContaining } from '@/lib/reporting/report-period';
+import { Input } from '@/components/ui/input';
 import type { Activity } from '@/types';
 
 // FR-SCH-04/05/06.
@@ -39,6 +41,26 @@ export function KegiatanPage() {
 
   function setFilters(next: ActivityFilters) {
     setSearchParams(filtersToSearchParams(next));
+  }
+
+  // Quick month picker next to the filter panel: sets dateFrom/dateTo to the
+  // chosen month's first/last day, so users don't have to open the popover
+  // and pick two dates just to see one month's activities.
+  const monthQuickValue =
+    filters.dateFrom && filters.dateFrom === monthRangeContaining(filters.dateFrom).start
+      ? filters.dateFrom.slice(0, 7)
+      : '';
+
+  function setMonthQuick(month: string) {
+    if (!month) {
+      const next = { ...filters };
+      delete next.dateFrom;
+      delete next.dateTo;
+      setFilters(next);
+      return;
+    }
+    const { start, end } = monthRangeContaining(`${month}-01`);
+    setFilters({ ...filters, dateFrom: start, dateTo: end });
   }
 
   const planById = useMemo(() => {
@@ -76,6 +98,13 @@ export function KegiatanPage() {
         description={`${filtered.length} dari ${activities.length} kegiatan`}
         actions={
           <div className="flex gap-2">
+            <Input
+              type="month"
+              className="w-[10.5rem]"
+              aria-label="Filter bulan"
+              value={monthQuickValue}
+              onChange={(e) => setMonthQuick(e.target.value)}
+            />
             <FilterPanel filters={filters} onChange={setFilters} />
             <Button onClick={() => openNew()}>
               <Plus className="h-4 w-4" aria-hidden="true" />

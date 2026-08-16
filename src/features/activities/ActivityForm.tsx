@@ -105,6 +105,7 @@ export function ActivityForm({
   }, []);
 
   const values = watch();
+  const [noTime, setNoTime] = useState(existing ? !existing.startTime && !existing.endTime : false);
   const evidenceForChecklist = useEvidenceForActivity(savedId);
   const skpPeriodForChecklist = useSkpPeriod(values.date ? values.date.slice(0, 7) : null);
   const duration = (() => {
@@ -137,7 +138,7 @@ export function ActivityForm({
     if (readOnly || !isDirty) return;
     const timer = setTimeout(() => {
       void (async () => {
-        if (!values.date || !values.startTime || !values.endTime) return;
+        if (!values.date) return;
         const current = await activityRepository.get(draftIdRef.current);
         const activity = buildActivityFromForm(
           { ...values, evidenceLink: values.evidenceLink || null },
@@ -220,22 +221,44 @@ export function ActivityForm({
         {errors.date ? <p className="text-xs text-destructive">{errors.date.message}</p> : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="startTime">2. Jam mulai kegiatan</Label>
-          <Input id="startTime" type="time" {...register('startTime')} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="endTime">3. Jam selesai kegiatan</Label>
-          <Input id="endTime" type="time" {...register('endTime')} />
-          {errors.endTime ? <p className="text-xs text-destructive">{errors.endTime.message}</p> : null}
-        </div>
-      </div>
-      {duration > 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Durasi: {Math.floor(duration / 60)}j {duration % 60}m
-        </p>
-      ) : null}
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Checkbox
+          checked={noTime}
+          onCheckedChange={(checked) => {
+            const isNoTime = checked === true;
+            setNoTime(isNoTime);
+            if (isNoTime) {
+              setValue('startTime', '', { shouldDirty: true, shouldValidate: true });
+              setValue('endTime', '', { shouldDirty: true, shouldValidate: true });
+            } else {
+              setValue('startTime', settings?.defaultStartTime ?? '08:00', { shouldDirty: true });
+              setValue('endTime', settings?.defaultEndTime ?? '16:00', { shouldDirty: true });
+            }
+          }}
+        />
+        Tidak mencatat jam kegiatan
+      </label>
+
+      {noTime ? null : (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="startTime">2. Jam mulai kegiatan</Label>
+              <Input id="startTime" type="time" {...register('startTime')} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="endTime">3. Jam selesai kegiatan</Label>
+              <Input id="endTime" type="time" {...register('endTime')} />
+              {errors.endTime ? <p className="text-xs text-destructive">{errors.endTime.message}</p> : null}
+            </div>
+          </div>
+          {duration > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Durasi: {Math.floor(duration / 60)}j {duration % 60}m
+            </p>
+          ) : null}
+        </>
+      )}
 
       <div className="space-y-1.5">
         <Label htmlFor="description">4. Deskripsi kegiatan</Label>

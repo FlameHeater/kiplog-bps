@@ -57,6 +57,11 @@ export function validateReadyToReport(
         : undefined,
   });
 
+  // Both blank means the user deliberately chose not to record a time for
+  // this activity — a valid, complete state, not an incomplete one. Only a
+  // HALF-filled pair (started typing one, not the other) is treated as
+  // incomplete.
+  const noTimeRecorded = !input.startTime && !input.endTime;
   const timesFilled = Boolean(input.startTime) && Boolean(input.endTime);
   const durationMinutes = timesFilled ? calculateDurationMinutes(input.startTime, input.endTime) : 0;
   const timeOrderOk = timesFilled && input.endTime > input.startTime;
@@ -64,14 +69,16 @@ export function validateReadyToReport(
   checks.push({
     field: 'startTime',
     label: 'Waktu',
-    passed: timesFilled && timeOrderOk && durationOk,
-    message: !timesFilled
-      ? 'Jam mulai dan selesai wajib diisi'
-      : !timeOrderOk
-        ? 'Jam selesai harus setelah jam mulai'
-        : !durationOk
-          ? 'Durasi harus antara 5 menit dan 12 jam'
-          : undefined,
+    passed: noTimeRecorded || (timesFilled && timeOrderOk && durationOk),
+    message: noTimeRecorded
+      ? undefined
+      : !timesFilled
+        ? 'Jam mulai dan selesai wajib diisi, atau kosongkan keduanya'
+        : !timeOrderOk
+          ? 'Jam selesai harus setelah jam mulai'
+          : !durationOk
+            ? 'Durasi harus antara 5 menit dan 12 jam'
+            : undefined,
   });
 
   checks.push({

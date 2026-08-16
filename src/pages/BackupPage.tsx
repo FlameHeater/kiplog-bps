@@ -209,14 +209,12 @@ export function BackupPage() {
     if (!pdfDrafts) return;
     setPdfImporting(true);
     try {
-      const startTime = settings?.defaultStartTime ?? '08:00';
-      const endTime = settings?.defaultEndTime ?? '16:00';
       const planById = new Map((plans ?? []).map((p) => [p.id, p]));
       const toImport = [];
       for (const [idx, draft] of pdfDrafts.entries()) {
         if (!pdfSelected.has(idx)) continue;
         const performancePlanId = effectivePlanId(idx);
-        toImport.push(draftToActivity(draft, { startTime, endTime, performancePlanId }));
+        toImport.push(draftToActivity(draft, { performancePlanId }));
         // FR-SRK-07/§12.1.4 — every RK assignment (auto or corrected) also
         // reinforces usage stats and folds new description tokens into the
         // plan's keywords, so later imports/recommendations get sharper.
@@ -482,8 +480,8 @@ export function BackupPage() {
           <p className="text-sm text-muted-foreground">
             Unggah berkas PDF "Rincian Aktivitas" (mis. dari aplikasi presensi) untuk membuat draf kegiatan di
             KipLog secara otomatis. Progress diisi 100% dan capaian dibuat otomatis dari deskripsinya. Jam pada
-            laporan PDF tidak dipakai (setiap draf memakai jam kerja default dari Pengaturan) — sesuaikan jam per
-            kegiatan setelah diimpor bila perlu.
+            laporan PDF tidak dipakai — jam kegiatan dibiarkan tidak dicatat, isi sendiri per kegiatan setelah
+            diimpor bila perlu.
           </p>
           <div className="space-y-1.5">
             <Label htmlFor="pdf-activity-file">Pilih berkas PDF Rincian Aktivitas</Label>

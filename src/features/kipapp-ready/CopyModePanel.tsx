@@ -55,7 +55,8 @@ export function CopyModePanel({
       <div className="space-y-2 border-b border-border p-4 md:border-b-0 md:border-r">
         <p className="text-xs font-medium text-muted-foreground">Data KipLog</p>
         <p className="text-xs text-muted-foreground">
-          {activity.date} · {activity.startTime}–{activity.endTime}
+          {activity.date} ·{' '}
+          {activity.startTime && activity.endTime ? `${activity.startTime}–${activity.endTime}` : 'jam tidak dicatat'}
         </p>
         <p className="line-clamp-2 text-sm font-medium">{activity.description}</p>
         <div className="flex items-center gap-2 text-xs">

@@ -15,11 +15,19 @@ const OptionalEvidenceLinkSchema = z.preprocess(
   HttpUrlSchema.nullable()
 );
 
+// Empty string ("") means "waktu tidak dicatat" — the user opted out of
+// recording a time for this activity, a deliberate choice, not a
+// validation error. Kept as `''` (not `null`) so every consumer that
+// already treats these as plain strings (sorting, display, exports)
+// keeps working without a type change; only the handful of places that
+// compute/format a duration need to check for emptiness first.
+const OptionalTimeStringSchema = z.union([TimeStringSchema, z.literal('')]);
+
 // Fields mapped 1:1 to the KipApp Add form, in KipApp's exact order (§2.2, FR-ACT-02).
 const ActivityCoreFieldsSchema = z.object({
   date: DateStringSchema,
-  startTime: TimeStringSchema,
-  endTime: TimeStringSchema,
+  startTime: OptionalTimeStringSchema,
+  endTime: OptionalTimeStringSchema,
   description: z.string().min(1, 'Deskripsi kegiatan wajib diisi'),
   progress: ProgressSchema,
   achievement: z.string(),
@@ -28,11 +36,13 @@ const ActivityCoreFieldsSchema = z.object({
 });
 
 const TIME_ORDER_MESSAGE = { message: 'Jam selesai harus setelah jam mulai', path: ['endTime'] };
+// Only enforce start < end when the user filled in BOTH times — an empty
+// pair (opted out) or a half-filled pair (still typing) isn't an ordering
+// error, it's just not a complete time range yet.
+const timeOrderValid = (data: { startTime: string; endTime: string }) =>
+  !data.startTime || !data.endTime || data.endTime > data.startTime;
 
-export const ActivityFormSchema = ActivityCoreFieldsSchema.refine(
-  (data) => data.endTime > data.startTime,
-  TIME_ORDER_MESSAGE
-);
+export const ActivityFormSchema = ActivityCoreFieldsSchema.refine(timeOrderValid, TIME_ORDER_MESSAGE);
 
 // Full edit form: core KipApp-order fields + KipLog-only fields the user can set.
 export const ActivityEditFormSchema = ActivityCoreFieldsSchema.extend({
@@ -40,14 +50,14 @@ export const ActivityEditFormSchema = ActivityCoreFieldsSchema.extend({
   location: z.string().optional(),
   tags: z.array(z.string()).default([]),
   rbAreas: z.array(RbAreaSchema).default([]),
-}).refine((data) => data.endTime > data.startTime, TIME_ORDER_MESSAGE);
+}).refine(timeOrderValid, TIME_ORDER_MESSAGE);
 
 export const ActivitySchema = z.object({
   id: z.string().uuid(),
 
   date: DateStringSchema,
-  startTime: TimeStringSchema,
-  endTime: TimeStringSchema,
+  startTime: OptionalTimeStringSchema,
+  endTime: OptionalTimeStringSchema,
   description: z.string().min(1),
   progress: ProgressSchema,
   achievement: z.string(),

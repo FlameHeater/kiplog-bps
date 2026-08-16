@@ -1,5 +1,5 @@
 import type { Activity } from '@/types';
-import { deriveYearAndSkpPeriod, calculateDurationMinutes } from './activity-fields';
+import { deriveYearAndSkpPeriod } from './activity-fields';
 import { generateAchievementSuggestions } from '@/lib/matching/achievement-generator';
 
 // Parses "Rincian Aktivitas" PDF exports (date / time / description /
@@ -90,14 +90,18 @@ export async function parsePdfActivityFile(file: File): Promise<DraftActivity[]>
 }
 
 export interface DraftActivityConfig {
-  startTime: string;
-  endTime: string;
   performancePlanId: string | null;
 }
 
 // FR-SCG: progress is always 100 (this is a historical log of completed
 // work), so the achievement suggestion always uses the "completed" template
 // — same generator used by the manual "Sarankan capaian" button.
+//
+// startTime/endTime are always '' ("waktu tidak dicatat") — the PDF's own
+// per-row timestamps are log times, not real activity times (see the
+// buildDraftActivities comment above), and defaulting to a fixed work-hours
+// window claimed a precision the source data doesn't have. The user picks a
+// real time later if they want one.
 export function draftToActivity(draft: DraftActivity, config: DraftActivityConfig): Activity {
   const now = new Date().toISOString();
   const { year, skpPeriod } = deriveYearAndSkpPeriod(draft.date);
@@ -106,8 +110,8 @@ export function draftToActivity(draft: DraftActivity, config: DraftActivityConfi
   return {
     id: crypto.randomUUID(),
     date: draft.date,
-    startTime: config.startTime,
-    endTime: config.endTime,
+    startTime: '',
+    endTime: '',
     description: draft.description,
     progress: 100,
     achievement: suggestion?.text ?? '',
@@ -118,7 +122,7 @@ export function draftToActivity(draft: DraftActivity, config: DraftActivityConfi
     skpPeriod,
     performancePlanId: config.performancePlanId,
 
-    durationMinutes: calculateDurationMinutes(config.startTime, config.endTime),
+    durationMinutes: 0,
     status: 'draft',
     evidenceLinkStatus: 'none',
     tags: [],

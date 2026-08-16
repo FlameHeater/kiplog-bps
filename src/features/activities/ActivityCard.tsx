@@ -2,6 +2,7 @@ import { Paperclip, Link2, Link2Off, Copy, CalendarRange, Pencil, Trash2 } from 
 import { Button } from '@/components/ui/button';
 import type { Activity, PerformancePlan } from '@/types';
 import { ACTIVITY_STATUS_LABELS } from './activity-status-labels';
+import { formatIndonesianDate } from '@/lib/date/date-utils';
 
 interface ActivityCardProps {
   activity: Activity;
@@ -27,8 +28,16 @@ export function ActivityCard({
     <div className="rounded-card border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          {activity.startTime} – {activity.endTime} · {Math.floor(activity.durationMinutes / 60)}j{' '}
-          {activity.durationMinutes % 60}m
+          {formatIndonesianDate(activity.date)}
+          {activity.startTime && activity.endTime ? (
+            <>
+              {' '}
+              · {activity.startTime} – {activity.endTime} · {Math.floor(activity.durationMinutes / 60)}j{' '}
+              {activity.durationMinutes % 60}m
+            </>
+          ) : (
+            <> · Jam tidak dicatat</>
+          )}
         </p>
         <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
           {ACTIVITY_STATUS_LABELS[activity.status]}

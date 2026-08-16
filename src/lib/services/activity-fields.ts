@@ -6,7 +6,10 @@ export function deriveYearAndSkpPeriod(date: string): { year: number; skpPeriod:
   return { year: Number(yearStr), skpPeriod: `${yearStr}-${monthStr}` };
 }
 
+// Either time can be '' ("waktu tidak dicatat") — that's not an error, it
+// just means there's no duration to compute.
 export function calculateDurationMinutes(startTime: string, endTime: string): number {
+  if (!startTime || !endTime) return 0;
   const [startH, startM] = startTime.split(':').map(Number) as [number, number];
   const [endH, endM] = endTime.split(':').map(Number) as [number, number];
   return endH * 60 + endM - (startH * 60 + startM);

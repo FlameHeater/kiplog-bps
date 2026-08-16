@@ -121,7 +121,7 @@ function buildFieldTable(
 ): Record<string, unknown> {
   const rows: [string, string, boolean][] = [
     ['Tanggal', dateRange, false],
-    ['Waktu Kegiatan', `${activity.startTime} - ${activity.endTime}`, false],
+    ['Waktu Kegiatan', activity.startTime && activity.endTime ? `${activity.startTime} - ${activity.endTime}` : '-', false],
     ['Kegiatan', activity.description, false],
     ['Capaian', activity.achievement, false],
     ['Progress', String(activity.progress), false],

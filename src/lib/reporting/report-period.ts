@@ -25,7 +25,15 @@ export function monthRangeContaining(date: string): { start: string; end: string
   return { start, end };
 }
 
-export function buildReportPeriod(kind: ReportPeriodKind, custom?: { start: string; end: string }): ReportPeriod {
+// `monthAnchor` ("YYYY-MM") picks which month "Bulanan" resolves to — lets
+// the UI offer a month dropdown instead of always locking to the current
+// month, without the user having to fall back to "Kustom" for anything
+// that isn't this month.
+export function buildReportPeriod(
+  kind: ReportPeriodKind,
+  custom?: { start: string; end: string },
+  monthAnchor?: string
+): ReportPeriod {
   const today = todayString();
   if (kind === 'harian') return { kind, startDate: today, endDate: today };
   if (kind === 'mingguan') {
@@ -33,7 +41,7 @@ export function buildReportPeriod(kind: ReportPeriodKind, custom?: { start: stri
     return { kind, startDate: start, endDate: end };
   }
   if (kind === 'bulanan') {
-    const { start, end } = monthRangeContaining(today);
+    const { start, end } = monthRangeContaining(monthAnchor ? `${monthAnchor}-01` : today);
     return { kind, startDate: start, endDate: end };
   }
   return { kind, startDate: custom?.start ?? today, endDate: custom?.end ?? today };
