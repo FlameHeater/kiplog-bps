@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { create } from 'zustand';
 import {
   fetchAuthenticatedEmail,
   requestSignIn,
@@ -32,12 +33,10 @@ function clearCache(): void {
 
 export type AuthStatus = 'loading' | 'signed-out' | 'unauthorized' | 'signed-in';
 
-interface AuthState {
+interface AuthStoreState {
   status: AuthStatus;
   email: string | null;
   error: string | null;
-  signIn: () => Promise<void>;
-  signOut: () => void;
 }
 
 // Comma-separated so more than one Google account can be trusted (e.g. a
@@ -53,97 +52,100 @@ function isAllowed(email: string): boolean {
   return allowedEmails.includes(email.toLowerCase());
 }
 
+// Shared singleton store — the bootstrap flow (including the background
+// silent-token refresh, which briefly tries to open a hidden Google popup)
+// must run exactly ONCE per app load, not once per component that reads
+// auth state. Every page that calls useAuth() (RequireAuth at the root,
+// SyncStatusCard in Pengaturan, etc.) shares this same store instead of
+// each re-running its own copy of the bootstrap effect — that duplication
+// was the cause of a popup re-triggering on every visit to Pengaturan.
+const useAuthStore = create<AuthStoreState>(() => ({
+  status: 'loading',
+  email: null,
+  error: null,
+}));
+
+let bootstrapped = false;
+
+async function bootstrap(): Promise<void> {
+  if (bootstrapped) return;
+  bootstrapped = true;
+
+  if (allowedEmails.length === 0) {
+    // Misconfiguration — fail closed, not open.
+    useAuthStore.setState({ status: 'unauthorized' });
+    return;
+  }
+
+  const cache = readCache();
+  if (cache && isAllowed(cache.email)) {
+    useAuthStore.setState({ email: cache.email, status: 'signed-in' });
+    // Best-effort background token refresh for sync — never blocks or
+    // signs the user out if it fails (e.g. offline).
+    void requestSilentToken();
+    return;
+  }
+
+  // No local cache (new device/browser) — try a silent token in case this
+  // browser already has a granted Google session, before falling back to
+  // showing the interactive login screen.
+  const token = await requestSilentToken();
+  if (!token) {
+    useAuthStore.setState({ status: 'signed-out' });
+    return;
+  }
+  try {
+    const verifiedEmail = await fetchAuthenticatedEmail(token);
+    if (isAllowed(verifiedEmail)) {
+      writeCache(verifiedEmail);
+      useAuthStore.setState({ email: verifiedEmail, status: 'signed-in' });
+    } else {
+      useAuthStore.setState({ email: verifiedEmail, status: 'unauthorized' });
+    }
+  } catch {
+    useAuthStore.setState({ status: 'signed-out' });
+  }
+}
+
+async function signIn(): Promise<void> {
+  useAuthStore.setState({ status: 'loading', error: null });
+  try {
+    const token = await requestSignIn();
+    const verifiedEmail = await fetchAuthenticatedEmail(token);
+    if (isAllowed(verifiedEmail)) {
+      writeCache(verifiedEmail);
+      useAuthStore.setState({ email: verifiedEmail, status: 'signed-in' });
+    } else {
+      revokeGoogleSession();
+      useAuthStore.setState({ email: verifiedEmail, status: 'unauthorized' });
+    }
+  } catch (err) {
+    useAuthStore.setState({ error: (err as Error).message, status: 'signed-out' });
+  }
+}
+
+function signOut(): void {
+  revokeGoogleSession();
+  clearCache();
+  useAuthStore.setState({ email: null, error: null, status: 'signed-out' });
+}
+
+interface AuthState extends AuthStoreState {
+  signIn: () => Promise<void>;
+  signOut: () => void;
+}
+
 // Gate identity: only an email in `allowedEmails` may ever reach
 // `signed-in`. A cached verification lets the app open offline after the
 // first real login (see docs/ASSUMPTIONS.md) — a live Google round-trip on
 // every open would lock the user out of their own offline data, which
 // defeats the point of this being an offline-first app.
 export function useAuth(): AuthState {
-  const [status, setStatus] = useState<AuthStatus>('loading');
-  const [email, setEmail] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const state = useAuthStore();
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function bootstrap() {
-      if (allowedEmails.length === 0) {
-        // Misconfiguration — fail closed, not open.
-        if (!cancelled) setStatus('unauthorized');
-        return;
-      }
-
-      const cache = readCache();
-      if (cache && isAllowed(cache.email)) {
-        if (!cancelled) {
-          setEmail(cache.email);
-          setStatus('signed-in');
-        }
-        // Best-effort background token refresh for sync — never blocks or
-        // signs the user out if it fails (e.g. offline).
-        void requestSilentToken();
-        return;
-      }
-
-      // No local cache (new device/browser) — try a silent token in case
-      // this browser already has a granted Google session, before falling
-      // back to showing the interactive login screen.
-      const token = await requestSilentToken();
-      if (cancelled) return;
-      if (!token) {
-        setStatus('signed-out');
-        return;
-      }
-      try {
-        const verifiedEmail = await fetchAuthenticatedEmail(token);
-        if (cancelled) return;
-        if (isAllowed(verifiedEmail)) {
-          writeCache(verifiedEmail);
-          setEmail(verifiedEmail);
-          setStatus('signed-in');
-        } else {
-          setEmail(verifiedEmail);
-          setStatus('unauthorized');
-        }
-      } catch {
-        if (!cancelled) setStatus('signed-out');
-      }
-    }
-
     void bootstrap();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
-  const signIn = useCallback(async () => {
-    setStatus('loading');
-    setError(null);
-    try {
-      const token = await requestSignIn();
-      const verifiedEmail = await fetchAuthenticatedEmail(token);
-      if (isAllowed(verifiedEmail)) {
-        writeCache(verifiedEmail);
-        setEmail(verifiedEmail);
-        setStatus('signed-in');
-      } else {
-        revokeGoogleSession();
-        setEmail(verifiedEmail);
-        setStatus('unauthorized');
-      }
-    } catch (err) {
-      setError((err as Error).message);
-      setStatus('signed-out');
-    }
-  }, []);
-
-  const signOut = useCallback(() => {
-    revokeGoogleSession();
-    clearCache();
-    setEmail(null);
-    setError(null);
-    setStatus('signed-out');
-  }, []);
-
-  return { status, email, error, signIn, signOut };
+  return { ...state, signIn, signOut };
 }
