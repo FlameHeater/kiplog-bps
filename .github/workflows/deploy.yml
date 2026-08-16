@@ -26,6 +26,9 @@ jobs:
       - run: npm ci
       # DEP-05: build fails if typecheck, lint, or test fails.
       - run: npm run verify
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+          VITE_ALLOWED_EMAIL: ${{ secrets.VITE_ALLOWED_EMAIL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -40,3 +40,31 @@ export class KipLogDatabase extends Dexie {
 }
 
 export const db = new KipLogDatabase();
+
+// Fires on every local write across all tables — the Drive sync engine
+// (src/lib/sync/sync-engine.ts) registers itself here via
+// `setOnLocalWrite` at app bootstrap instead of this file importing the
+// sync engine directly, which would create a require cycle (sync-engine
+// imports backup.ts imports the repositories imports this file).
+let onLocalWrite: (() => void) | null = null;
+
+export function setOnLocalWrite(handler: () => void): void {
+  onLocalWrite = handler;
+}
+
+const WRITABLE_TABLES = [
+  db.userProfile,
+  db.performancePlans,
+  db.activities,
+  db.evidence,
+  db.templates,
+  db.skpPeriods,
+  db.planPeriodStatus,
+  db.settings,
+] as const;
+
+for (const table of WRITABLE_TABLES) {
+  table.hook('creating', () => onLocalWrite?.());
+  table.hook('updating', () => onLocalWrite?.());
+  table.hook('deleting', () => onLocalWrite?.());
+}
