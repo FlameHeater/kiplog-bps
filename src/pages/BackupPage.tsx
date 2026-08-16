@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { AlertTriangle, Archive, FileJson, FileSpreadsheet, Upload } from 'lucide-react';
+import { AlertTriangle, Archive, FileJson, FileSpreadsheet, FileText, Upload } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useSettings } from '@/hooks/useSettings';
 import { useActivities } from '@/hooks/useActivities';
+import { activityRepository } from '@/db/repositories';
 import { formatIndonesianDate, todayString } from '@/lib/date/date-utils';
 import { downloadBlob } from '@/lib/utils/download-blob';
 import {
@@ -28,6 +29,11 @@ import {
   type ParsedKipAppSheet,
   type ReconciliationRow,
 } from '@/lib/services/kipapp-import';
+import {
+  draftToActivity,
+  parsePdfActivityFile,
+  type DraftActivity,
+} from '@/lib/services/pdf-activity-import';
 
 // FR-DAT-07…11.
 export function BackupPage() {
@@ -53,6 +59,14 @@ export function BackupPage() {
   const [dateColumn, setDateColumn] = useState<number | null>(null);
   const [descriptionColumn, setDescriptionColumn] = useState<number | null>(null);
   const [reconciliation, setReconciliation] = useState<ReconciliationRow[] | null>(null);
+
+  const pdfFileInputRef = useRef<HTMLInputElement>(null);
+  const [pdfDrafts, setPdfDrafts] = useState<DraftActivity[] | null>(null);
+  const [pdfSelected, setPdfSelected] = useState<Set<number>>(new Set());
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [pdfParsing, setPdfParsing] = useState(false);
+  const [pdfImporting, setPdfImporting] = useState(false);
+  const [pdfImportedCount, setPdfImportedCount] = useState<number | null>(null);
 
   async function handleExportJson() {
     setIsExporting('json');
@@ -131,6 +145,49 @@ export function BackupPage() {
     setReconciliation(
       reconcileWithLocalActivities(kipAppSheet, { dateColumn, descriptionColumn }, activities ?? [])
     );
+  }
+
+  async function handlePdfFileSelected(file: File) {
+    setPdfError(null);
+    setPdfDrafts(null);
+    setPdfImportedCount(null);
+    setPdfParsing(true);
+    try {
+      const drafts = await parsePdfActivityFile(file);
+      if (drafts.length === 0) {
+        setPdfError('Tidak ada baris kegiatan yang dikenali di berkas PDF ini.');
+        return;
+      }
+      setPdfDrafts(drafts);
+      setPdfSelected(new Set(drafts.map((_, idx) => idx)));
+    } catch {
+      setPdfError('Gagal membaca berkas PDF. Pastikan ini berkas Rincian Aktivitas yang benar.');
+    } finally {
+      setPdfParsing(false);
+    }
+  }
+
+  function togglePdfDraft(idx: number) {
+    setPdfSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  }
+
+  async function confirmPdfImport() {
+    if (!pdfDrafts) return;
+    setPdfImporting(true);
+    try {
+      const toImport = pdfDrafts.filter((_, idx) => pdfSelected.has(idx)).map(draftToActivity);
+      await activityRepository.bulkAdd(toImport);
+      setPdfImportedCount(toImport.length);
+      setPdfDrafts(null);
+      if (pdfFileInputRef.current) pdfFileInputRef.current.value = '';
+    } finally {
+      setPdfImporting(false);
+    }
   }
 
   async function confirmDelete() {
@@ -369,6 +426,82 @@ export function BackupPage() {
               ) : (
                 <p className="text-sm text-success">Seluruh kegiatan di KipApp sudah tercatat di KipLog.</p>
               )}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Import Kegiatan dari PDF Rincian Aktivitas</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Unggah berkas PDF "Rincian Aktivitas" (mis. dari aplikasi presensi) untuk membuat draf kegiatan di
+            KipLog secara otomatis. Setiap kegiatan dibuat sebagai draf tanpa Rencana Kinerja — tautkan dan
+            lengkapi lewat halaman Kegiatan setelah diimpor.
+          </p>
+          <div className="space-y-1.5">
+            <Label htmlFor="pdf-activity-file">Pilih berkas PDF Rincian Aktivitas</Label>
+            <input
+              id="pdf-activity-file"
+              ref={pdfFileInputRef}
+              type="file"
+              accept=".pdf"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handlePdfFileSelected(file);
+              }}
+              className="block w-full text-sm"
+            />
+          </div>
+
+          {pdfParsing ? <p className="text-sm text-muted-foreground">Membaca berkas PDF…</p> : null}
+          {pdfError ? <ErrorBanner message={pdfError} onDismiss={() => setPdfError(null)} /> : null}
+          {pdfImportedCount !== null ? (
+            <p className="text-sm text-success">{pdfImportedCount} kegiatan berhasil diimpor sebagai draf.</p>
+          ) : null}
+
+          {pdfDrafts ? (
+            <div className="space-y-3">
+              <p className="text-sm">
+                {pdfSelected.size} dari {pdfDrafts.length} kegiatan dipilih untuk diimpor.
+              </p>
+              <div className="max-h-72 overflow-y-auto rounded-card border border-border">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-card text-left text-muted-foreground">
+                    <tr>
+                      <th className="px-2 py-1"></th>
+                      <th className="px-2 py-1">Tanggal</th>
+                      <th className="px-2 py-1">Jam</th>
+                      <th className="px-2 py-1">Deskripsi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pdfDrafts.map((d, idx) => (
+                      <tr key={idx} className="border-t border-border">
+                        <td className="px-2 py-1">
+                          <input
+                            type="checkbox"
+                            checked={pdfSelected.has(idx)}
+                            onChange={() => togglePdfDraft(idx)}
+                            aria-label={`Pilih kegiatan: ${d.description}`}
+                          />
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-1">{d.date}</td>
+                        <td className="whitespace-nowrap px-2 py-1">
+                          {d.startTime}–{d.endTime}
+                        </td>
+                        <td className="px-2 py-1">{d.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Button size="sm" disabled={pdfSelected.size === 0 || pdfImporting} onClick={() => void confirmPdfImport()}>
+                <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+                {pdfImporting ? 'Mengimpor…' : `Impor ${pdfSelected.size} Kegiatan`}
+              </Button>
             </div>
           ) : null}
         </CardContent>
