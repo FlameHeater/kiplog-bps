@@ -14,6 +14,17 @@ const STATUS_BADGE_CLASS: Record<ActivityStatus, string> = {
   archived: 'bg-muted/60 text-muted-foreground/70',
 };
 
+// Status also colors the whole card (left accent bar + faint background
+// tint), not just the badge text, so cards are distinguishable at a glance
+// in a long scrolling list — not just when reading each badge individually.
+const STATUS_CARD_CLASS: Record<ActivityStatus, string> = {
+  draft: 'border-l-muted-foreground/40 bg-card',
+  complete: 'border-l-info bg-info/5',
+  ready_to_report: 'border-l-warning bg-warning/5',
+  reported: 'border-l-success bg-success/5',
+  archived: 'border-l-muted-foreground/20 bg-muted/20 opacity-75',
+};
+
 interface ActivityCardProps {
   activity: Activity;
   plan: PerformancePlan | null;
@@ -35,7 +46,7 @@ export function ActivityCard({
   const locked = activity.sentForReview;
 
   return (
-    <div className="rounded-card border border-border bg-card p-4">
+    <div className={`rounded-card border border-l-4 border-border p-4 ${STATUS_CARD_CLASS[activity.status]}`}>
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm text-muted-foreground">
           {formatIndonesianDate(activity.date)}
