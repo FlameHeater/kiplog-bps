@@ -51,7 +51,9 @@ export interface ImportImpact {
   willReplaceSettings: boolean;
 }
 
-async function collectPayload(): Promise<BackupPayload> {
+// Exported for src/lib/sync/sync-engine.ts, which builds the same payload
+// shape for the Drive folder sync instead of a downloadable backup file.
+export async function collectPayload(): Promise<BackupPayload> {
   const [userProfile, settings, performancePlans, activities, evidence, templates, skpPeriods, planPeriodStatus] =
     await Promise.all([
       userProfileRepository.get(),
@@ -92,7 +94,7 @@ export async function exportBackupJson(): Promise<{ blob: Blob; filename: string
   return { blob, filename: `kiplog-backup-${todayString()}.json` };
 }
 
-function extensionFromMimeType(mimeType: string | undefined): string {
+export function extensionFromMimeType(mimeType: string | undefined): string {
   const map: Record<string, string> = {
     'image/png': 'png',
     'image/jpeg': 'jpg',
@@ -129,7 +131,7 @@ export async function exportBackupZip(): Promise<{ blob: Blob; filename: string 
 
 // FR-DAT-10: newer-than-current is rejected; older is migrated in place.
 // No migrations exist yet since schema v1 is the only version shipped.
-function migratePayload(payload: BackupPayload): BackupPayload {
+export function migratePayload(payload: BackupPayload): BackupPayload {
   if (payload.schemaVersion > SCHEMA_VERSION) {
     throw new Error('Berkas cadangan ini dibuat oleh KipLog versi lebih baru. Perbarui aplikasi terlebih dahulu.');
   }

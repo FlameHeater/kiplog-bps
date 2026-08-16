@@ -53,8 +53,9 @@ export function SyncStatusCard() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Data disimpan di folder Google Drive bersama supaya sama di semua akun dan perangkat Anda. Jika dua
-          perangkat diubah bersamaan, perubahan yang tersinkron paling akhir yang dipakai.
+          Data disimpan sebagai berkas biasa (kiplog-data.json + folder evidence/) di folder Google Drive bersama
+          supaya sama di semua akun dan perangkat Anda — bisa dibuka langsung di Drive. Jika dua perangkat diubah
+          bersamaan, perubahan yang tersinkron paling akhir yang dipakai.
         </p>
       </CardContent>
     </Card>
