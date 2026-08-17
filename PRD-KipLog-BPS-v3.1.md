@@ -58,7 +58,8 @@ Mandat: merancang dan membangun **KipLog BPS** — aplikasi web pendamping perso
 |---|---|
 | **CON-01** | KipLog adalah **companion app**, bukan pengganti/replika/klien KipApp. |
 | **CON-02** | **Tidak boleh** mengasumsikan adanya API KipApp. Tidak ada integrasi otomatis. |
-| **CON-03** | **Dilarang** melakukan scraping, headless-browser automation, atau login otomatis ke KipApp (`https://webapps.bps.go.id/kipapp/`). |
+| **CON-03** | **Dilarang** melakukan scraping, headless-browser automation, atau login otomatis ke KipApp (`https://webapps.bps.go.id/kipapp/`). **Direvisi 2026-08-17** atas permintaan eksplisit pemilik proyek setelah larangan ini dibacakan ulang kepadanya: diizinkan **satu** pengecualian sempit berupa bookmarklet autofill yang dijalankan pengguna sendiri di tab KipApp yang sudah ia login (lihat CON-03a). Larangan scraping, headless-browser, dan login otomatis tetap berlaku utuh. |
+| **CON-03a** | Bookmarklet autofill hanya boleh: berjalan di host `webapps.bps.go.id`, **menulis** ke field form, dan melaporkan field yang gagal ditemukan. **Dilarang**: membaca/mengirim data KipApp ke mana pun, menekan tombol Save/Submit, dan berjalan tanpa tindakan sadar pengguna. Pencocokan field bertumpu pada teks label yang terlihat, sehingga pemeriksaan akhir sebelum Save tetap milik pengguna. |
 | **CON-04** | **Dilarang** meminta, menyimpan, atau mengirim kredensial community/KipApp dalam bentuk apa pun. |
 | **CON-05** | MVP **wajib berjalan penuh tanpa backend**. Semua data tersimpan di perangkat pengguna. |
 | **CON-06** | **Dilarang** mengirim isi kegiatan/bukti dukung ke server pihak ketiga (termasuk analytics). Pada MVP: nol permintaan jaringan keluar. |

@@ -1,13 +1,19 @@
 import { useState } from 'react';
-import { Check, Copy, Paperclip, Link2, Link2Off } from 'lucide-react';
+import { Check, Copy, Paperclip, Link2, Link2Off, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { Button } from '@/components/ui/button';
 import { buildCopyModeFields, buildSalinSemuaText } from '@/lib/services/copy-mode-text';
+import {
+  autofillBlockedReason,
+  buildAutofillPayload,
+  serializeAutofillPayload,
+} from '@/lib/services/kipapp-autofill';
 import { copyToClipboard } from '@/lib/utils/clipboard';
-import type { Activity } from '@/types';
+import type { Activity, PerformancePlan } from '@/types';
 
 interface CopyModePanelProps {
   activity: Activity;
+  plan?: PerformancePlan | null;
   isFocused: boolean;
   requireEvidenceLinkForReady: boolean;
   onFocus: () => void;
@@ -18,6 +24,7 @@ interface CopyModePanelProps {
 // FR-KAR-04…08 — two-column Copy Mode card for one kegiatan.
 export function CopyModePanel({
   activity,
+  plan,
   isFocused,
   requireEvidenceLinkForReady,
   onFocus,
@@ -26,8 +33,10 @@ export function CopyModePanel({
 }: CopyModePanelProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const fields = buildCopyModeFields(activity);
+  const autofillBlocked = autofillBlockedReason(activity);
   const missingLink = !activity.evidenceLink;
-  const blockReported = missingLink && requireEvidenceLinkForReady && activity.status !== 'reported';
+  const blockReported =
+    missingLink && requireEvidenceLinkForReady && activity.status !== 'reported';
   const isReported = activity.status === 'reported';
 
   async function copyField(key: string, value: string) {
@@ -44,6 +53,14 @@ export function CopyModePanel({
     }
   }
 
+  async function copyAutofill() {
+    const payload = serializeAutofillPayload(buildAutofillPayload(activity, plan));
+    if (await copyToClipboard(payload)) {
+      setCopiedKey('__autofill__');
+      window.setTimeout(() => setCopiedKey((k) => (k === '__autofill__' ? null : k)), 2000);
+    }
+  }
+
   return (
     <div
       onClick={onFocus}
@@ -56,7 +73,9 @@ export function CopyModePanel({
         <p className="text-xs font-medium text-muted-foreground">Data KipLog</p>
         <p className="text-xs text-muted-foreground">
           {activity.date} ·{' '}
-          {activity.startTime && activity.endTime ? `${activity.startTime}–${activity.endTime}` : 'jam tidak dicatat'}
+          {activity.startTime && activity.endTime
+            ? `${activity.startTime}–${activity.endTime}`
+            : 'jam tidak dicatat'}
         </p>
         <p className="line-clamp-2 text-sm font-medium">{activity.description}</p>
         <div className="flex items-center gap-2 text-xs">
@@ -105,7 +124,11 @@ export function CopyModePanel({
                 void copyField(field.key, field.value);
               }}
             >
-              {copiedKey === field.key ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : 'Salin'}
+              {copiedKey === field.key ? (
+                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                'Salin'
+              )}
             </Button>
           </div>
         ))}
@@ -130,6 +153,34 @@ export function CopyModePanel({
             </>
           )}
         </Button>
+
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="w-full"
+          disabled={autofillBlocked !== null}
+          title={
+            autofillBlocked ?? 'Salin data untuk ditempel ke panel bookmarklet di halaman KipApp'
+          }
+          onClick={(e) => {
+            e.stopPropagation();
+            void copyAutofill();
+          }}
+        >
+          {copiedKey === '__autofill__' ? (
+            <>
+              <Check className="h-3.5 w-3.5" aria-hidden="true" /> Data autofill tersalin
+            </>
+          ) : (
+            <>
+              <Wand2 className="h-3.5 w-3.5" aria-hidden="true" /> Salin untuk Autofill
+            </>
+          )}
+        </Button>
+        {autofillBlocked ? (
+          <p className="text-xs text-muted-foreground">{autofillBlocked}</p>
+        ) : null}
 
         <Button
           type="button"

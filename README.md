@@ -11,17 +11,18 @@ tautannya** untuk diinput ke KipApp.
 ## Kenapa ini penting
 
 KipApp meminta **tautan** (URL) sebagai bukti dukung, bukan unggahan file
-langsung — field ke-7 pada form Pelaksanaan Kegiatan adalah "Link bukti
-dukung". Artinya bukti harus dirapikan menjadi satu berkas, diunggah ke
+langsung — field ke-7 pada dialog "Add Capaian Kegiatan Perhari" berlabel
+"Data Dukung" dan hanya menerima teks. Artinya bukti harus dirapikan menjadi
+satu berkas, diunggah ke
 Google Drive, lalu tautannya disalin kembali ke KipApp. KipLog menyiapkan
 rantai kerja ini: mengumpulkan bukti mentah, menghasilkan PDF "Data Dukung
 Laporan Kegiatan" siap unggah, dan menyediakan tempat untuk menyimpan
 tautan setelah Anda mengunggahnya sendiri.
 
 KipLog **tidak terintegrasi** dengan KipApp — tidak ada API, tidak ada
-login otomatis, tidak ada data yang dikirim ke KipApp. Anda tetap menyalin/menempel ke
-KipApp secara manual; KipLog hanya membuat langkah itu lebih cepat dan
-lebih rapi.
+login otomatis, tidak ada data yang dikirim ke KipApp. Pemindahan tetap terjadi
+di browser Anda sendiri, entah dengan menempel manual atau lewat bookmarklet
+autofill (lihat "Autofill ke KipApp"); penyimpanannya tetap Anda yang menekan.
 
 ## Status
 
@@ -50,7 +51,7 @@ penyimpan sinkronisasi (lihat "Login & Sinkronisasi"). Detail lengkap di
 - **Bukti Dukung**: unggah/kompresi gambar, tautan eksternal, galeri per kegiatan, Evidence Inbox untuk bukti yang belum ditautkan.
 - **Kalender & Dashboard**: tampilan bulan/minggu/hari (agenda list di mobile), ringkasan capaian SKP, alert & nudge.
 - **Laporan**: PDF "Data Dukung Laporan Kegiatan", Excel, CSV/JSON, Evidence Pack ZIP.
-- **KipApp Ready**: mode salin dua kolom untuk memindahkan data ke KipApp secara manual, dengan penguncian periode.
+- **KipApp Ready**: mode salin dua kolom untuk memindahkan data ke KipApp, dengan penguncian periode, plus bookmarklet autofill (lihat di bawah).
 - **Backup & Import**: backup JSON/ZIP, restore (gabung/ganti), hapus semua data, dan rekonsiliasi Excel Pelaksanaan dari KipApp (lihat kolom mana yang sudah/belum tercatat di KipLog).
 - **Rencana Kinerja & Template**: 40 RK 2026 (seed), template kegiatan yang bisa dipakai ulang.
 - **Login & Sinkronisasi**: akses dibatasi ke akun Google yang diizinkan, data disinkronkan antar perangkat lewat satu folder Google Drive bersama.
@@ -95,6 +96,30 @@ bersamaan.
 Penyiapan di sisi Google (project Google Cloud, Drive API, consent screen,
 OAuth Client ID, folder Drive bersama) harus dilakukan manual — langkah
 lengkapnya ada di [.env.example](.env.example).
+
+## Autofill ke KipApp
+
+Halaman KipApp Ready menyediakan bookmarklet yang mengisi form **Add Capaian
+Kegiatan Perhari** di KipApp dari data KipLog, sehingga sembilan field tidak
+perlu ditempel satu per satu. Alurnya: buka form Add di KipApp → tekan "Salin
+untuk Autofill" di KipLog → klik bookmarklet di tab KipApp → tempel → "Isi
+Form" → **Anda** yang menekan Save.
+
+Label, urutan, dan format nilai field diambil dari tangkapan layar dialog itu
+di `Panduan KipApp - Pengguna V.3.1.pdf` halaman 66, bukan dari tebakan.
+
+Batasnya, dan ini disengaja:
+
+- Skrip menolak berjalan di host selain `webapps.bps.go.id`.
+- Skrip hanya **menulis** ke field — tidak membaca data KipApp dan tidak mengirim apa pun ke mana pun.
+- Skrip **tidak menekan Save**. Pencocokan field bertumpu pada teks label yang terlihat, dan tata letak KipApp bisa berubah tanpa pemberitahuan; karena itu pemeriksaan akhir tetap milik pengguna.
+- Field yang gagal ditemukan dilaporkan, tidak didiamkan.
+- Tidak ada kredensial KipApp yang diminta atau disimpan. Tidak ada scraping, tidak ada headless browser, tidak ada login otomatis.
+- Kegiatan yang sudah dikirim untuk dinilai ditolak, karena KipApp sendiri tidak mengizinkan perubahan setelah itu.
+
+Ini pengecualian sempit yang diminta pemilik proyek terhadap PRD CON-03 —
+lihat CON-03a di PRD dan entri terkait di
+[docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md).
 
 ## Instalasi & Pengembangan Lokal
 
@@ -150,7 +175,7 @@ berbagi folder sebelum menempelkan tautan.
 
 ## Batasan yang jujur
 
-- **Tidak terintegrasi dengan KipApp** — semua penyalinan field dilakukan manual oleh pengguna.
+- **Tidak terintegrasi dengan KipApp** — tidak ada API, tidak ada login otomatis, tidak ada pengiriman data. Bookmarklet autofill hanya mengisi field di browser Anda sendiri; Anda tetap yang menekan Save.
 - **Butuh akun Google yang diizinkan** — tanpa itu aplikasi tidak dapat dibuka sama sekali, dan perangkat baru butuh internet untuk login pertama.
 - **Sinkronisasi bukan penggabungan sungguhan** — snapshot terakhir menang, bukan merge per-record; bukan untuk beberapa orang mengedit bersamaan.
 - **KipLog tidak mengunggah berkas Data Dukung ke Drive secara otomatis** — folder sinkron hanya berisi data KipLog dan bukti dukung mentah; berkas PDF Data Dukung yang tautannya dipakai di KipApp tetap diunggah pengguna sendiri.

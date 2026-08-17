@@ -3,7 +3,13 @@ import { ChevronDown, ChevronRight, Copy, Lock, LockOpen } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Button } from '@/components/ui/button';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useActivities } from '@/hooks/useActivities';
 import { usePerformancePlans } from '@/hooks/usePerformancePlans';
@@ -11,14 +17,30 @@ import { useSettings } from '@/hooks/useSettings';
 import { useSkpPeriod } from '@/hooks/useSkpPeriod';
 import { usePlanPeriodStatuses } from '@/hooks/usePlanPeriodStatuses';
 import { CopyModePanel } from '@/features/kipapp-ready/CopyModePanel';
-import { markActivityReported, setPeriodLocked, setPlanCompleted, unmarkActivityReported } from '@/lib/services/kipapp-ready';
+import { AutofillSetupCard } from '@/features/kipapp-ready/AutofillSetupCard';
+import {
+  markActivityReported,
+  setPeriodLocked,
+  setPlanCompleted,
+  unmarkActivityReported,
+} from '@/lib/services/kipapp-ready';
 import { buildSalinSemuaText } from '@/lib/services/copy-mode-text';
 import { copyToClipboard } from '@/lib/utils/clipboard';
 import type { Activity, PerformancePlan } from '@/types';
 
 const MONTH_NAMES_ID = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
 ];
 
 interface PlanGroup {
@@ -28,7 +50,9 @@ interface PlanGroup {
 
 function isTypingTarget(el: EventTarget | null): boolean {
   const tag = (el as HTMLElement | null)?.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || (el as HTMLElement | null)?.isContentEditable === true;
+  return (
+    tag === 'INPUT' || tag === 'TEXTAREA' || (el as HTMLElement | null)?.isContentEditable === true
+  );
 }
 
 // FR-KAR-01…12, §14.6 — grouped-per-RK Copy Mode, meniru urutan kerja KipApp (§3.3).
@@ -67,7 +91,10 @@ export function KipAppReadyPage() {
     const result: PlanGroup[] = [];
     for (const [key, list] of byPlan) {
       list.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
-      result.push({ plan: key === '__none__' ? null : (planById.get(key) ?? null), activities: list });
+      result.push({
+        plan: key === '__none__' ? null : (planById.get(key) ?? null),
+        activities: list,
+      });
     }
     result.sort((a, b) => {
       if (!a.plan) return 1;
@@ -82,7 +109,9 @@ export function KipAppReadyPage() {
   const totalActivities = periodActivities.length;
   const reportedActivities = periodActivities.filter((a) => a.status === 'reported').length;
   const totalPlans = groups.filter((g) => g.plan).length;
-  const completedPlans = groups.filter((g) => g.plan && g.activities.every((a) => a.status === 'reported')).length;
+  const completedPlans = groups.filter(
+    (g) => g.plan && g.activities.every((a) => a.status === 'reported')
+  ).length;
 
   function groupId(plan: PerformancePlan | null): string {
     return plan?.id ?? '__none__';
@@ -105,7 +134,9 @@ export function KipAppReadyPage() {
 
       if (e.key === 'j' || e.key === 'J') {
         e.preventDefault();
-        setFocusedId(flatOrder[Math.min(currentIndex + 1, flatOrder.length - 1)] ?? flatOrder[0] ?? null);
+        setFocusedId(
+          flatOrder[Math.min(currentIndex + 1, flatOrder.length - 1)] ?? flatOrder[0] ?? null
+        );
       } else if (e.key === 'k' || e.key === 'K') {
         e.preventDefault();
         setFocusedId(flatOrder[Math.max(currentIndex - 1, 0)] ?? flatOrder[0] ?? null);
@@ -139,7 +170,9 @@ export function KipAppReadyPage() {
 
   if (activities === undefined) return null;
 
-  const yearOptions = Array.from(new Set([year, now.getFullYear(), now.getFullYear() - 1])).sort((a, b) => b - a);
+  const yearOptions = Array.from(new Set([year, now.getFullYear(), now.getFullYear() - 1])).sort(
+    (a, b) => b - a
+  );
 
   function renderGroup(group: PlanGroup) {
     const gid = groupId(group.plan);
@@ -162,7 +195,9 @@ export function KipAppReadyPage() {
             ) : (
               <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             )}
-            <span className="truncate text-sm font-medium">{group.plan ? (group.plan.displayName ?? group.plan.name) : 'Tanpa Rencana Kinerja'}</span>
+            <span className="truncate text-sm font-medium">
+              {group.plan ? (group.plan.displayName ?? group.plan.name) : 'Tanpa Rencana Kinerja'}
+            </span>
             <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs">
               {reported}/{total} {isPlanCompleted ? '✓' : ''}
             </span>
@@ -197,6 +232,7 @@ export function KipAppReadyPage() {
               <CopyModePanel
                 key={activity.id}
                 activity={activity}
+                plan={group.plan}
                 isFocused={focusedId === activity.id}
                 requireEvidenceLinkForReady={settings?.requireEvidenceLinkForReady ?? true}
                 onFocus={() => setFocusedId(activity.id)}
@@ -214,12 +250,14 @@ export function KipAppReadyPage() {
     <div>
       <PageHeader
         title="KipApp Ready"
-        description="Salin data KipLog ke form KipApp satu per satu, lalu tandai yang sudah selesai."
+        description="Salin atau autofill data KipLog ke form KipApp, lalu tandai yang sudah selesai."
         actions={
           <Button
             type="button"
             variant={skpPeriodRecord?.isLocked ? 'secondary' : 'outline'}
-            onClick={() => void setPeriodLocked(skpPeriod, skpPeriodRecord ?? null, !skpPeriodRecord?.isLocked)}
+            onClick={() =>
+              void setPeriodLocked(skpPeriod, skpPeriodRecord ?? null, !skpPeriodRecord?.isLocked)
+            }
           >
             {skpPeriodRecord?.isLocked ? (
               <>
@@ -236,10 +274,14 @@ export function KipAppReadyPage() {
 
       {skpPeriodRecord?.isLocked ? (
         <p className="mb-4 rounded-card border border-warning/40 bg-warning/5 p-3 text-xs text-warning">
-          Di KipApp, mencentang Kirim SKP untuk dinilai membuat seluruh bulan tidak dapat diedit lagi. Kegiatan pada
-          periode ini kini bersifat baca-saja di KipLog.
+          Di KipApp, mencentang Kirim SKP untuk dinilai membuat seluruh bulan tidak dapat diedit
+          lagi. Kegiatan pada periode ini kini bersifat baca-saja di KipLog.
         </p>
       ) : null}
+
+      <div className="mb-4">
+        <AutofillSetupCard />
+      </div>
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="space-y-1.5">
@@ -277,7 +319,8 @@ export function KipAppReadyPage() {
           Kelompokkan per Ketua Tim
         </label>
         <p className="pb-2 text-xs text-muted-foreground">
-          {reportedActivities} dari {totalActivities} kegiatan sudah ditandai · RK {completedPlans} dari {totalPlans}
+          {reportedActivities} dari {totalActivities} kegiatan sudah ditandai · RK {completedPlans}{' '}
+          dari {totalPlans}
         </p>
       </div>
 
