@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { db } from '@/db/database';
-import { seedPerformancePlansIfEmpty } from '@/lib/services/seed-performance-plans';
+import {
+  refreshSeedKeywords,
+  seedPerformancePlansIfEmpty,
+} from '@/lib/services/seed-performance-plans';
 import { PERFORMANCE_PLANS_2026 } from '@/data/performance-plans-2026';
 
 afterEach(async () => {
@@ -35,5 +38,39 @@ describe('seedPerformancePlansIfEmpty', () => {
 
   it('matches the source seed count', () => {
     expect(PERFORMANCE_PLANS_2026).toHaveLength(40);
+  });
+});
+
+describe('refreshSeedKeywords', () => {
+  it('menambahkan kata kunci bawaan baru ke RK yang sudah tersimpan', async () => {
+    await seedPerformancePlansIfEmpty();
+
+    // Tiru kondisi pemasangan lama: kata kunci RK #5 dipangkas ke daftar
+    // sebelum kalibrasi Agustus 2026 (belum ada 'shped'/'harga perdesaan').
+    const rk5 = (await db.performancePlans.toArray()).find((p) => p.sortOrder === 5)!;
+    await db.performancePlans.put({ ...rk5, keywords: ['ihk', 'inflasi'] });
+
+    const result = await refreshSeedKeywords();
+    expect(result.plansUpdated).toBeGreaterThan(0);
+    expect(result.keywordsAdded).toBeGreaterThan(0);
+
+    const after = (await db.performancePlans.toArray()).find((p) => p.sortOrder === 5)!;
+    expect(after.keywords).toContain('shped');
+  });
+
+  it('tidak menghapus kata kunci buatan pengguna sendiri', async () => {
+    await seedPerformancePlansIfEmpty();
+    const rk5 = (await db.performancePlans.toArray()).find((p) => p.sortOrder === 5)!;
+    await db.performancePlans.put({ ...rk5, keywords: [...rk5.keywords, 'pasar seririt'] });
+
+    await refreshSeedKeywords();
+
+    const after = (await db.performancePlans.toArray()).find((p) => p.sortOrder === 5)!;
+    expect(after.keywords).toContain('pasar seririt');
+  });
+
+  it('tidak melakukan apa pun kalau kata kunci bawaan sudah lengkap', async () => {
+    await seedPerformancePlansIfEmpty();
+    expect(await refreshSeedKeywords()).toEqual({ plansUpdated: 0, keywordsAdded: 0 });
   });
 });

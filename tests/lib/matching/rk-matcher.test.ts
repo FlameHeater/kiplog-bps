@@ -52,6 +52,76 @@ describe('recommendPerformancePlans — QA-08 required cases', () => {
   });
 });
 
+// Kalibrasi Agustus 2026 — kasus di bawah diambil dari file cascading kinerja
+// resmi dan dari log kegiatan nyata (Data Dukung April + Rincian Aktivitas
+// Juli–Agustus 2026). Tiga di antaranya GAGAL pada matcher versi sebelumnya.
+describe('recommendPerformancePlans — kalibrasi kosakata nyata', () => {
+  it('satu kata kunci yang khas sudah cukup melewati ambang (dulu 32 < 35, selalu terbuang)', () => {
+    const results = recommendPerformancePlans(
+      'Pengawasan Sakernas Agustus 2026 di Tejakula',
+      plans,
+      2026
+    );
+    expect(results[0]?.plan.id).toBe(byNo(1).id);
+  });
+
+  it.each([
+    ['Melakukan Pemeriksaan Dokumen Survei Harga Perdesaan (SHPed) April 2026', 5],
+    ['Melakukan Pengawasan VHTL dan VHTS Bulan April 2026', 6],
+    ['Melakukan Pemeriksaan IMK dan IBS', 4],
+    ['Pemeriksaa SKTNP Triwulan I 2026', 7],
+    ['Pemeriksaan Survei Khusus Lembaga Non Profit Triwulanan', 12],
+    ['Perbaikan Anomali SE2026 di FASIH', 16],
+    ['Melakukan Lapor Bangkom Pelatihan Petugas Organik di Gojags', 35],
+    ['Menjadi Operator e-surat BPS Kabupaten Buleleng', 38],
+    ['Pengumpulan Bukti Dukung QG Gate 3', 36],
+    ['Mengikuti Zoom Internalisasi Romantik Tahun 2026', 23],
+  ])('istilah lapangan "%s" mengarah ke RK #%i', (description, no) => {
+    const results = recommendPerformancePlans(description, plans, 2026);
+    expect(results[0]?.plan.sortOrder).toBe(no);
+  });
+
+  it('tidak lagi menukar bidang gara-gara kerangka nama RK yang sama (Harga vs Jasa)', () => {
+    // Nama kedua RK ini hanya berbeda satu kata; kemiripan teks mentahnya 0.92.
+    const results = recommendPerformancePlans(
+      'Mengerjakan input data survei harga produsen',
+      plans,
+      2026
+    );
+    expect(results[0]?.plan.sortOrder).toBe(5);
+    expect(results.map((r) => r.plan.sortOrder)).not.toContain(6);
+  });
+
+  it('memisahkan RK sebidang lewat jenis pekerjaan: rilis vs pelaksanaan Neraca Pengeluaran', () => {
+    const rilis = recommendPerformancePlans(
+      'Menyiapkan bahan rilis BRS neraca pengeluaran',
+      plans,
+      2026
+    );
+    expect(rilis[0]?.plan.sortOrder).toBe(9);
+
+    const lapangan = recommendPerformancePlans(
+      'Pemeriksaan dokumen SKLNPT triwulan I',
+      plans,
+      2026
+    );
+    expect(lapangan[0]?.plan.sortOrder).toBe(12);
+  });
+
+  it('kata kunci yang dipakai banyak RK tidak menentukan sendirian', () => {
+    // "opd" dimiliki RK #23, #24, dan #26 — tanpa penciri lain, tak satu pun
+    // boleh melewati ambang hanya karena kata itu.
+    const results = recommendPerformancePlans('Berkoordinasi dengan OPD', plans, 2026);
+    expect(results).toHaveLength(0);
+  });
+
+  it('abstain, bukan menebak, untuk deskripsi tanpa istilah yang dikenal', () => {
+    expect(
+      recommendPerformancePlans('Halal bi Halal di BPS Kabupaten Buleleng', plans, 2026)
+    ).toHaveLength(0);
+  });
+});
+
 describe('recommendPerformancePlans — output contract', () => {
   it('never returns more than 3 recommendations', () => {
     const results = recommendPerformancePlans('Melakukan input petugas SNLIK 2026', plans, 2026);
@@ -85,8 +155,23 @@ describe('applyLocalLearning (§12.1.4)', () => {
     expect(learned.filter((k) => k.toLowerCase() === 'snlik')).toHaveLength(1);
   });
 
+  it('tidak menyimpan kata yang terlalu umum sebagai kata kunci', () => {
+    // Tanpa saringan ini, "rapat" tersimpan hanya di satu RK sehingga
+    // pembobotan kekhasan menganggapnya penciri kuat — kebalikan kenyataan.
+    const learned = applyLocalLearning(
+      byNo(2),
+      'Mengikuti rapat rutin tim di kantor BPS Kabupaten Buleleng'
+    );
+    expect(learned).not.toContain('rapat');
+    expect(learned).not.toContain('kantor');
+    expect(learned).not.toContain('mengikuti');
+  });
+
   it('caps the list at 50, dropping the oldest first', () => {
-    const plan = { ...byNo(2), keywords: Array.from({ length: 49 }, (_, i) => `existingkeyword${i}`) };
+    const plan = {
+      ...byNo(2),
+      keywords: Array.from({ length: 49 }, (_, i) => `existingkeyword${i}`),
+    };
     const learned = applyLocalLearning(plan, 'satu dua tiga empat lima enam');
     expect(learned.length).toBeLessThanOrEqual(50);
     expect(learned).toContain('existingkeyword48'); // most recent survives
