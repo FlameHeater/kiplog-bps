@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Check, Copy, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { buildBookmarkletHref, KIPAPP_HOST } from '@/lib/services/kipapp-autofill';
+import { buildBookmarkletHref, KIPAPP_HOSTS } from '@/lib/services/kipapp-autofill';
 import { copyToClipboard } from '@/lib/utils/clipboard';
 
 /**
@@ -93,8 +93,15 @@ export function AutofillSetupCard() {
             <p className="font-medium text-foreground">Batasnya, supaya jelas:</p>
             <ul className="list-disc space-y-0.5 pl-5">
               <li>
-                Skrip hanya berjalan di <code>{KIPAPP_HOST}</code> dan hanya <em>menulis</em> ke
-                field — tidak membaca data KipApp, tidak mengirim apa pun ke mana pun.
+                Skrip hanya berjalan di{' '}
+                {KIPAPP_HOSTS.map((host, index) => (
+                  <span key={host}>
+                    {index > 0 ? ' atau ' : ''}
+                    <code>{host}</code>
+                  </span>
+                ))}{' '}
+                dan hanya <em>menulis</em> ke field — tidak membaca data KipApp, tidak mengirim apa
+                pun ke mana pun.
               </li>
               <li>
                 <strong>Tidak menekan Save.</strong> Pencocokan field bertumpu pada teks label yang

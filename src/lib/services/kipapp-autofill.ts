@@ -3,23 +3,32 @@ import type { Activity, PerformancePlan } from '@/types';
 /**
  * Autofill form KipApp dari data KipLog.
  *
- * SUMBER: `Panduan KipApp - Pengguna V.3.1.pdf` halaman 65–67 — tangkapan
- * layar dialog **"Add Capaian Kegiatan Perhari"** dibaca langsung, bukan
- * ditebak dari teks panduan. Label, urutan, jenis kontrol, dan format nilai
- * di bawah persis seperti yang terlihat di dialog itu:
+ * SUMBER: dua tahap. Awalnya tangkapan layar `Panduan KipApp - Pengguna
+ * V.3.1.pdf` halaman 66; lalu **dikoreksi terhadap tangkapan layar form
+ * sungguhan KipApp v2.0.4 (2026)** yang dikirim pemilik proyek. Panduan itu
+ * bertanggal 2022 dan formnya sudah berubah — dua perbedaan yang membuat
+ * versi pertama gagal sebagian dicatat di baris "BEDA 2026" di bawah.
  *
- * | Label di KipApp          | Kontrol   | Contoh nilai di panduan            |
- * |--------------------------|-----------|------------------------------------|
- * | Pegawai / Tahun / SKP    | teks baca | terisi otomatis, tidak diisi skrip |
- * | * Rencana Kinerja        | select    | nama RK verbatim                   |
- * | * Tanggal                | date      | `2022-12-05` (ISO, bukan "5 Desember 2022") |
- * | * Jam Mulai              | time      | `08:00`                            |
- * | * Jam Selesai            | time      | `11:30`                            |
- * | * Kegiatan               | textarea  | deskripsi kegiatan                 |
- * | * Progres                | number    | `100` (satu huruf s)               |
- * | * Capaian                | textarea  | capaian hasil kegiatan             |
- * | Data Dukung              | text      | URL bukti dukung                   |
- * | Masukan ke capaian SKP   | checkbox  | tercentang                         |
+ * | Label di KipApp             | Kontrol   | Catatan                          |
+ * |-----------------------------|-----------|----------------------------------|
+ * | Pegawai / Tahun / SKP       | teks baca | terisi sendiri, tidak disentuh   |
+ * | * Rencana Kinerja           | select    | nama RK verbatim (DR-01)         |
+ * | Gunakan periode tanggal     | checkbox  | BEDA 2026 — dibiarkan tidak tercentang (kegiatan KipLog selalu satu hari) |
+ * | Gunakan jam                 | checkbox  | BEDA 2026 — **Jam Mulai/Selesai tidak ada di DOM sampai ini dicentang** |
+ * | * Tanggal                   | picker    | placeholder "Pilih tanggal" — pemilih buatan sendiri, bukan input date bawaan |
+ * | * Jam Mulai / * Jam Selesai | time      | hanya muncul lewat "Gunakan jam" |
+ * | * Kegiatan                  | textarea  | placeholder "Deskripsi Kegiatan" |
+ * | * Progres                   | number    | satu huruf s                     |
+ * | * Capaian                   | textarea  | placeholder "Deskripsi Capaian"  |
+ * | Data Dukung                 | text      | placeholder "Link Data Dukung"   |
+ * | Masukan ke capaian SKP      | checkbox  | bawaannya TIDAK tercentang       |
+ *
+ * Catatan yang belum terjawab: periode SKP di KipApp 2026 bersifat TRIWULANAN
+ * ("1 April - 30 Juni (Triwulan II)"), sedangkan panduan 2022 menunjukkan
+ * bulanan dan KipLog memodelkan `skpPeriod` sebagai `YYYY-MM`. Tidak
+ * berpengaruh pada autofill (field SKP hanya teks baca), tetapi berpengaruh
+ * pada arti "kunci periode" di halaman KipApp Ready — belum diubah karena itu
+ * menyentuh skema data, bukan fitur ini.
  *
  * PERUBAHAN SIKAP TERHADAP CON-03. PRD melarang scraping, otomasi
  * headless-browser, dan login otomatis ke KipApp. Fitur ini diminta eksplisit
@@ -40,8 +49,16 @@ import type { Activity, PerformancePlan } from '@/types';
 
 const PAYLOAD_VERSION = 1;
 
-/** Host KipApp (PRD CON-03). Bookmarklet menolak berjalan di host lain. */
-export const KIPAPP_HOST = 'webapps.bps.go.id';
+/**
+ * Host KipApp yang diizinkan. Bookmarklet menolak berjalan di host lain.
+ *
+ * Dua-duanya, bukan salah satu: PRD CON-03 menyebut
+ * `webapps.bps.go.id/kipapp/`, sedangkan pemilik proyek memakai
+ * `kipapp.bps.go.id`. Diperiksa 2026-08-18 — keduanya menjawab HTTP 200, jadi
+ * keduanya masih hidup dan tidak ada yang boleh dihapus dari daftar ini
+ * berdasarkan dugaan mana yang "lebih baru".
+ */
+export const KIPAPP_HOSTS = ['kipapp.bps.go.id', 'webapps.bps.go.id'] as const;
 
 export interface KipAppAutofillPayload {
   kiplogAutofill: number;
@@ -111,9 +128,9 @@ export function autofillBlockedReason(activity: Activity): string | null {
  * luar (CSP KipApp hampir pasti memblokirnya), dan harus utuh sendiri.
  */
 export const AUTOFILL_SCRIPT = `(function () {
-  var HOST = '${KIPAPP_HOST}';
-  if (location.hostname !== HOST) {
-    alert('Bookmarklet KipLog hanya untuk ' + HOST + '. Halaman ini bukan KipApp.');
+  var HOSTS = ${JSON.stringify(KIPAPP_HOSTS)};
+  if (HOSTS.indexOf(location.hostname) === -1) {
+    alert('Bookmarklet KipLog hanya untuk ' + HOSTS.join(' atau ') + '. Halaman ini bukan KipApp.');
     return;
   }
   var OLD = document.getElementById('kiplog-autofill-panel');
@@ -135,30 +152,103 @@ export const AUTOFILL_SCRIPT = `(function () {
     return (s || '').replace(/\\s+/g, ' ').replace(/[*:]/g, '').trim().toLowerCase();
   }
 
-  function controlNear(el) {
+  var CONTROLS = 'input:not([type=hidden]), textarea, select';
+
+  function flatIndex(el) {
+    var all = document.getElementsByTagName('*');
+    for (var i = 0; i < all.length; i++) if (all[i] === el) return i;
+    return -1;
+  }
+
+  /**
+   * Kontrol yang PALING DEKAT dengan teks label, bukan yang pertama ditemukan
+   * di leluhurnya. Dua checkbox "Gunakan periode tanggal" dan "Gunakan jam"
+   * duduk di satu baris yang sama; memilih yang pertama ketemu akan mencentang
+   * checkbox yang salah.
+   */
+  function controlNear(el, selector) {
+    var anchor = flatIndex(el);
+    var best = null;
+    var bestDistance = Infinity;
     var scope = el;
-    for (var up = 0; up < 5 && scope; up++) {
-      var found = scope.querySelectorAll('input:not([type=hidden]), textarea, select');
+    for (var up = 0; up < 6 && scope; up++) {
+      var found = scope.querySelectorAll(selector || CONTROLS);
       for (var i = 0; i < found.length; i++) {
         var c = found[i];
-        if (!c.disabled && !c.readOnly) return c;
+        if (c.disabled || c.readOnly) continue;
+        var d = Math.abs(flatIndex(c) - anchor);
+        if (d < bestDistance) { best = c; bestDistance = d; }
       }
+      if (best) return best;
       scope = scope.parentElement;
     }
     return null;
   }
 
-  function findControl(labelText) {
-    var wanted = norm(labelText);
-    var nodes = document.querySelectorAll('label, span, div, td, p, strong');
+  function size(el) {
+    return el.getElementsByTagName('*').length;
+  }
+
+  /**
+   * Batasi pencarian ke dalam dialognya saja.
+   *
+   * Sidebar KipApp memuat menu "Rencana Kinerja" dan "Pelaksanaan", jadi
+   * mencari label di seluruh halaman bisa menemukan menu itu, bukan field di
+   * dialog. Diambil elemen TERKECIL yang memuat judul dialog sekaligus
+   * setidaknya satu kontrol form.
+   */
+  function dialogScope() {
+    var TITLE = 'add capaian kegiatan perhari';
+    var nodes = document.querySelectorAll('div, section, form');
+    var best = null;
+    var bestSize = Infinity;
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
-      if (el.children.length !== 0) continue;
-      if (norm(el.textContent) !== wanted) continue;
-      var ctl = controlNear(el);
-      if (ctl) return ctl;
+      if (norm(el.textContent).indexOf(TITLE) === -1) continue;
+      if (!el.querySelector(CONTROLS)) continue;
+      var s = size(el);
+      if (s < bestSize) { best = el; bestSize = s; }
     }
-    return null;
+    return best || document.body;
+  }
+
+  var SCOPE = dialogScope();
+
+  /**
+   * Label dicari sebagai elemen TERKECIL yang teksnya pas.
+   *
+   * Tidak bisa mensyaratkan elemen tanpa anak: tanda bintang wajib di KipApp
+   * adalah elemen sendiri di dalam label (bintang dibungkus tag tersendiri di
+   * dalam elemen label), sehingga labelnya punya anak. Sebaliknya juga tidak boleh menerima
+   * sembarang leluhur yang teksnya kebetulan sama — karena itu yang subtree-nya
+   * paling kecil yang dipakai.
+   */
+  function findControl(labelText, selector) {
+    var wanted = norm(labelText);
+    var nodes = SCOPE.querySelectorAll('label, span, div, td, p, strong, b');
+    var best = null;
+    var bestSize = Infinity;
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (norm(el.textContent) !== wanted) continue;
+      var s = size(el);
+      if (s < bestSize) { best = el; bestSize = s; }
+    }
+    return best ? controlNear(best, selector) : null;
+  }
+
+  /**
+   * Menyetel checkbox pengalih tampilan ke keadaan yang diinginkan.
+   *
+   * KipApp 2.0.4 menyembunyikan Jam Mulai/Jam Selesai di balik checkbox
+   * "Gunakan jam" — field itu TIDAK ADA di DOM sampai checkbox-nya dicentang.
+   * Panduan 2022 tidak punya checkbox ini sama sekali.
+   */
+  function setToggle(labelText, wanted) {
+    var cb = findControl(labelText, 'input[type=checkbox]');
+    if (!cb) return null;
+    if (cb.checked !== wanted) cb.click();
+    return cb.checked === wanted;
   }
 
   function setNative(ctl, value) {
@@ -187,24 +277,45 @@ export const AUTOFILL_SCRIPT = `(function () {
       return true;
     }
     setNative(ctl, String(value));
+    // Tanggal di KipApp 2.0.4 bukan input date bawaan browser melainkan
+    // pemilih tanggal buatan sendiri (placeholder "Pilih tanggal"), yang
+    // umumnya baru mengambil nilai saat field kehilangan fokus atau Enter
+    // ditekan. Kedua isyarat itu dikirim; input/change saja belum tentu cukup.
+    if (ctl.type !== 'checkbox') {
+      ctl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      ctl.dispatchEvent(new Event('blur', { bubbles: true }));
+    }
     return true;
   }
 
   function apply(data, report) {
     var done = [];
     var failed = [];
+    var notes = [];
+
+    // Satu tanggal, bukan rentang: kegiatan KipLog selalu satu hari.
+    setToggle('Gunakan periode tanggal', false);
+
+    // Jam hanya ada di DOM setelah "Gunakan jam" dicentang.
+    var wantJam = !!(data.jamMulai && data.jamSelesai);
+    var jamToggle = setToggle('Gunakan jam', wantJam);
+    if (wantJam && jamToggle === null) {
+      notes.push('checkbox "Gunakan jam" tidak ditemukan, jam mungkin tidak terisi');
+    }
+
     for (var i = 0; i < LABELS.length; i++) {
       var key = LABELS[i][0];
       var label = LABELS[i][1];
       var value = data[key];
       if (value === null || value === undefined || value === '') continue;
+      if ((key === 'jamMulai' || key === 'jamSelesai') && !wantJam) continue;
       var ctl = findControl(label);
       if (!ctl) { failed.push(label + ' (field tidak ditemukan)'); continue; }
       if (!fill(ctl, value)) { failed.push(label + ' (nilai tidak cocok dengan pilihan)'); continue; }
       ctl.style.outline = '2px solid #16a34a';
       done.push(label);
     }
-    report(done, failed);
+    report(done, failed, notes);
   }
 
   var panel = document.createElement('div');
@@ -231,10 +342,11 @@ export const AUTOFILL_SCRIPT = `(function () {
     var data;
     try { data = JSON.parse(raw); } catch (e) { out.textContent = 'Data tidak bisa dibaca (JSON tidak valid).'; return; }
     if (!data || !data.kiplogAutofill) { out.textContent = 'Ini bukan data autofill dari KipLog.'; return; }
-    apply(data, function (done, failed) {
+    apply(data, function (done, failed, notes) {
       out.innerHTML = '<b>Terisi:</b> ' + (done.length ? done.join(', ') : '\\u2014') +
         (failed.length ? '<br><b style="color:#b45309">Gagal:</b> ' + failed.join('; ') : '') +
-        '<br><span style="color:#475569">Periksa lalu tekan Save sendiri.</span>';
+        (notes.length ? '<br><b style="color:#b45309">Catatan:</b> ' + notes.join('; ') : '') +
+        '<br><span style="color:#475569">Periksa isian \\u2014 terutama Tanggal \\u2014 lalu tekan Save sendiri.</span>';
     });
   };
   panel.querySelector('#kiplog-in').focus();

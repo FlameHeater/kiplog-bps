@@ -105,12 +105,15 @@ perlu ditempel satu per satu. Alurnya: buka form Add di KipApp → tekan "Salin
 untuk Autofill" di KipLog → klik bookmarklet di tab KipApp → tempel → "Isi
 Form" → **Anda** yang menekan Save.
 
-Label, urutan, dan format nilai field diambil dari tangkapan layar dialog itu
-di `Panduan KipApp - Pengguna V.3.1.pdf` halaman 66, bukan dari tebakan.
+Label, urutan, dan jenis kontrol field diambil dari tangkapan layar dialog itu
+di `Panduan KipApp - Pengguna V.3.1.pdf` halaman 66, lalu **dikoreksi terhadap
+tangkapan layar form sungguhan KipApp v2.0.4 (2026)**. Panduan itu bertanggal
+2022 dan formnya sudah berubah: ada dua checkbox baru, dan Jam Mulai/Jam
+Selesai tidak ada di halaman sampai "Gunakan jam" dicentang.
 
 Batasnya, dan ini disengaja:
 
-- Skrip menolak berjalan di host selain `webapps.bps.go.id`.
+- Skrip menolak berjalan di host selain `kipapp.bps.go.id` dan `webapps.bps.go.id` (KipApp dapat diakses lewat keduanya).
 - Skrip hanya **menulis** ke field — tidak membaca data KipApp dan tidak mengirim apa pun ke mana pun.
 - Skrip **tidak menekan Save**. Pencocokan field bertumpu pada teks label yang terlihat, dan tata letak KipApp bisa berubah tanpa pemberitahuan; karena itu pemeriksaan akhir tetap milik pengguna.
 - Field yang gagal ditemukan dilaporkan, tidak didiamkan.

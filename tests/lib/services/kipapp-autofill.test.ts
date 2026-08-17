@@ -1,6 +1,6 @@
 /**
  * @vitest-environment jsdom
- * @vitest-environment-options { "url": "https://webapps.bps.go.id/kipapp/" }
+ * @vitest-environment-options { "url": "https://kipapp.bps.go.id/" }
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -54,14 +54,18 @@ describe('buildAutofillPayload', () => {
   });
 
   it('tidak menebak nama RK kalau kegiatan belum ditautkan ke RK', () => {
-    expect(buildAutofillPayload({ ...activity, performancePlanId: null }, null).rencanaKinerja).toBeNull();
+    expect(
+      buildAutofillPayload({ ...activity, performancePlanId: null }, null).rencanaKinerja
+    ).toBeNull();
   });
 });
 
 describe('autofillBlockedReason', () => {
   it('menolak kegiatan yang sudah dikirim untuk dinilai', () => {
     // Panduan hal. 68: yang sudah dikirim tidak bisa dibatalkan atau diedit.
-    expect(autofillBlockedReason({ ...activity, sentForReview: true })).toMatch(/dikirim untuk dinilai/i);
+    expect(autofillBlockedReason({ ...activity, sentForReview: true })).toMatch(
+      /dikirim untuk dinilai/i
+    );
   });
 
   it('menolak kegiatan yang capaiannya masih kosong (field wajib di KipApp)', () => {
@@ -82,36 +86,82 @@ describe('buildBookmarkletHref', () => {
 });
 
 /**
- * Tiruan dialog "Add Capaian Kegiatan Perhari" mengikuti tangkapan layar
- * panduan hal. 66: label sebagai elemen teks terpisah dari kontrolnya, tanda
- * bintang wajib di depan, dan tiga field teratas (Pegawai/Tahun/SKP) hanya
- * teks baca tanpa input.
+ * Tiruan dialog "Add Capaian Kegiatan Perhari" mengikuti tangkapan layar form
+ * SUNGGUHAN KipApp v2.0.4 (2026) yang dikirim pemilik proyek — bukan lagi
+ * panduan 2022. Yang ditirukan dan penting:
+ *
+ * - Label berupa elemen teks terpisah dari kontrolnya, dengan tanda bintang
+ *   wajib sebagai elemen sendiri.
+ * - Pegawai/Tahun/SKP hanya teks baca tanpa input. SKP kini triwulanan.
+ * - Dua checkbox pengalih, "Gunakan periode tanggal" dan "Gunakan jam",
+ *   duduk **di baris yang sama** — sengaja, karena inilah yang membuat
+ *   pemilihan "kontrol pertama yang ketemu di leluhur" mencentang checkbox
+ *   yang salah.
+ * - Jam Mulai/Jam Selesai **tidak ada di DOM** sampai "Gunakan jam" dicentang.
+ * - Tanggal berupa input teks dengan placeholder "Pilih tanggal", bukan input
+ *   date bawaan browser.
  */
 function renderFakeKipAppDialog(): void {
   document.body.innerHTML = `
     <div class="modal">
       <h3>Add Capaian Kegiatan Perhari</h3>
-      <div class="row"><label>Pegawai:</label><span>[340015817] Nama Pegawai</span></div>
+      <div class="row"><label>Pegawai:</label><span>[340063146] Nama Pegawai</span></div>
       <div class="row"><label>Tahun:</label><span>2026</span></div>
-      <div class="row"><label>SKP:</label><span>1 Agustus - 31 Agustus (Bulan Agustus)</span></div>
-      <div class="row"><label>* Rencana Kinerja:</label>
+      <div class="row"><label>SKP:</label><span>1 April - 30 Juni (Triwulan II)</span></div>
+      <div class="row"><label><i>*</i> Rencana Kinerja:</label>
         <select id="f-rk">
           <option>Pilih rencana kinerja SKP</option>
           <option>Terlaksananya Kegiatan Statistik Harga sesuai SOP dan tepat waktu.</option>
           <option>Telaksananya Kegiatan Sensus Ekonomi 2026 sesuai SOP dan tepat waktu</option>
         </select>
       </div>
-      <div class="row"><label>* Tanggal:</label><input id="f-date" type="date" /></div>
-      <div class="row"><label>* Jam Mulai:</label><input id="f-start" type="time" /></div>
-      <div class="row"><label>* Jam Selesai:</label><input id="f-end" type="time" /></div>
-      <div class="row"><label>* Kegiatan:</label><textarea id="f-keg"></textarea></div>
-      <div class="row"><label>* Progres:</label><input id="f-prog" type="number" /></div>
-      <div class="row"><label>* Capaian:</label><textarea id="f-cap"></textarea></div>
-      <div class="row"><label>Data Dukung:</label><input id="f-link" type="text" /></div>
+      <div class="row toggles">
+        <input id="f-range" type="checkbox" /><span>Gunakan periode tanggal</span>
+        <input id="f-usejam" type="checkbox" /><span>Gunakan jam</span>
+      </div>
+      <div class="row"><label><i>*</i> Tanggal:</label><input id="f-date" type="text" placeholder="Pilih tanggal" /></div>
+      <div id="jam-slot"></div>
+      <div class="row"><label><i>*</i> Kegiatan:</label><textarea id="f-keg" placeholder="Deskripsi Kegiatan"></textarea></div>
+      <div class="row"><label><i>*</i> Progres:</label><input id="f-prog" type="number" value="100" /></div>
+      <div class="row"><label><i>*</i> Capaian:</label><textarea id="f-cap" placeholder="Deskripsi Capaian"></textarea></div>
+      <div class="row"><label>Data Dukung:</label><input id="f-link" type="text" placeholder="Link Data Dukung" /></div>
       <div class="row"><label>Masukan ke capaian SKP:</label><input id="f-skp" type="checkbox" /></div>
       <button id="f-cancel">Cancel</button>
       <button id="f-save">Save</button>
     </div>`;
+
+  // Meniru perilaku KipApp: field jam baru dibuat saat checkbox dicentang.
+  const useJam = document.querySelector<HTMLInputElement>('#f-usejam')!;
+  const slot = document.querySelector<HTMLDivElement>('#jam-slot')!;
+  useJam.addEventListener('change', () => {
+    slot.innerHTML = useJam.checked
+      ? '<div class="row"><label><i>*</i> Jam Mulai:</label><input id="f-start" type="time" /></div>' +
+        '<div class="row"><label><i>*</i> Jam Selesai:</label><input id="f-end" type="time" /></div>'
+      : '';
+  });
+}
+
+/**
+ * Sidebar + halaman di belakang dialog, seperti pada tangkapan layar: menu
+ * "Rencana Kinerja" dan filter halaman dengan label yang sama persis dengan
+ * field di dialog. Ini jebakan yang nyata — tanpa pembatasan lingkup ke
+ * dialognya, autofill bisa mengisi filter halaman, bukan formnya.
+ */
+function renderDecoyPage(): void {
+  const decoy = document.createElement('div');
+  decoy.innerHTML = `
+    <nav>
+      <a href="#">Rencana Kinerja</a>
+      <a href="#">RK Anggota</a>
+      <a href="#">Pelaksanaan</a>
+    </nav>
+    <div class="page">
+      <div class="row"><label>Rencana Kinerja</label>
+        <select id="page-rk"><option>Pilih rencana kinerja SKP</option></select>
+      </div>
+      <div class="row"><label>Tanggal</label><input id="page-date" type="text" /></div>
+    </div>`;
+  document.body.insertBefore(decoy, document.body.firstChild);
 }
 
 function runBookmarklet(payload: string): void {
@@ -142,12 +192,8 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
 
   it('memicu event input dan change supaya framework KipApp ikut memperbarui state-nya', () => {
     const seen: string[] = [];
-    document
-      .querySelector('#f-keg')!
-      .addEventListener('input', () => seen.push('input'));
-    document
-      .querySelector('#f-keg')!
-      .addEventListener('change', () => seen.push('change'));
+    document.querySelector('#f-keg')!.addEventListener('input', () => seen.push('input'));
+    document.querySelector('#f-keg')!.addEventListener('change', () => seen.push('change'));
 
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
     expect(seen).toEqual(['input', 'change']);
@@ -160,11 +206,42 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it('melewati jam yang tidak dicatat alih-alih mengisinya dengan string kosong', () => {
+  it('mencentang "Gunakan jam" lebih dulu, karena field jam belum ada sebelum itu', () => {
+    expect(document.querySelector('#f-start')).toBeNull(); // memang belum ada
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    expect(document.querySelector<HTMLInputElement>('#f-usejam')!.checked).toBe(true);
+    expect(document.querySelector<HTMLInputElement>('#f-start')!.value).toBe('08:00');
+    expect(document.querySelector<HTMLInputElement>('#f-end')!.value).toBe('11:30');
+  });
+
+  it('mencentang checkbox jam yang BENAR, bukan "Gunakan periode tanggal" di baris yang sama', () => {
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    expect(document.querySelector<HTMLInputElement>('#f-range')!.checked).toBe(false);
+  });
+
+  it('membiarkan "Gunakan jam" tidak tercentang saat jam tidak dicatat', () => {
     const noTime = { ...activity, startTime: '', endTime: '' };
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(noTime, plan)));
-    expect(document.querySelector<HTMLInputElement>('#f-start')!.value).toBe('');
+    expect(document.querySelector<HTMLInputElement>('#f-usejam')!.checked).toBe(false);
+    expect(document.querySelector('#f-start')).toBeNull();
     expect(document.querySelector<HTMLTextAreaElement>('#f-keg')!.value).toBe(noTime.description);
+  });
+
+  it('mematikan "Gunakan periode tanggal" bila sedang tercentang — kegiatan KipLog satu hari', () => {
+    document.querySelector<HTMLInputElement>('#f-range')!.click();
+    expect(document.querySelector<HTMLInputElement>('#f-range')!.checked).toBe(true);
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    expect(document.querySelector<HTMLInputElement>('#f-range')!.checked).toBe(false);
+  });
+
+  it('mengirim blur dan Enter setelah mengisi tanggal, karena pemilihnya buatan sendiri', () => {
+    const seen: string[] = [];
+    const date = document.querySelector('#f-date')!;
+    date.addEventListener('keydown', (e) => seen.push(`keydown:${(e as KeyboardEvent).key}`));
+    date.addEventListener('blur', () => seen.push('blur'));
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    expect(seen).toContain('keydown:Enter');
+    expect(seen).toContain('blur');
   });
 
   it('melaporkan field yang tidak ditemukan, tidak mendiamkannya', () => {
@@ -177,7 +254,10 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
   it('melaporkan bila nama RK tidak ada di antara opsi select', () => {
     runBookmarklet(
       serializeAutofillPayload(
-        buildAutofillPayload(activity, { ...plan, name: 'RK yang tidak ada di KipApp' } as PerformancePlan)
+        buildAutofillPayload(activity, {
+          ...plan,
+          name: 'RK yang tidak ada di KipApp',
+        } as PerformancePlan)
       )
     );
     const out = document.querySelector('#kiplog-out')!.textContent!;
@@ -194,5 +274,18 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
   it('menolak teks yang bukan JSON', () => {
     runBookmarklet('bukan json');
     expect(document.querySelector('#kiplog-out')!.textContent).toContain('tidak bisa dibaca');
+  });
+
+  it('mengisi field di dialog, bukan menu sidebar atau filter halaman dengan label sama', () => {
+    renderDecoyPage();
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    expect(document.querySelector<HTMLSelectElement>('#f-rk')!.value).toBe(plan.name);
+    expect(document.querySelector<HTMLInputElement>('#f-date')!.value).toBe('2026-08-17');
+    // Kontrol berlabel sama di halaman belakang harus tetap kosong.
+    expect(document.querySelector<HTMLSelectElement>('#page-rk')!.value).toBe(
+      'Pilih rencana kinerja SKP'
+    );
+    expect(document.querySelector<HTMLInputElement>('#page-date')!.value).toBe('');
   });
 });
