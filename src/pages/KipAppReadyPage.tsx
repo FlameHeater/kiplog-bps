@@ -25,8 +25,17 @@ import {
   unmarkActivityReported,
 } from '@/lib/services/kipapp-ready';
 import { buildSalinSemuaText } from '@/lib/services/copy-mode-text';
+import { formatIndonesianDate } from '@/lib/date/date-utils';
+import {
+  groupActivitiesByDate,
+  groupActivitiesByPlan,
+  type DateGroup,
+  type DateOrder,
+  type GroupBy,
+  type PlanGroup,
+} from '@/lib/services/kipapp-ready-grouping';
 import { copyToClipboard } from '@/lib/utils/clipboard';
-import type { Activity, PerformancePlan } from '@/types';
+import type { PerformancePlan } from '@/types';
 
 const MONTH_NAMES_ID = [
   'Januari',
@@ -42,11 +51,6 @@ const MONTH_NAMES_ID = [
   'November',
   'Desember',
 ];
-
-interface PlanGroup {
-  plan: PerformancePlan | null;
-  activities: Activity[];
-}
 
 function isTypingTarget(el: EventTarget | null): boolean {
   const tag = (el as HTMLElement | null)?.tagName;
@@ -72,6 +76,8 @@ export function KipAppReadyPage() {
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [groupByLeader, setGroupByLeader] = useState(false);
+  const [groupBy, setGroupBy] = useState<GroupBy>('rk');
+  const [dateOrder, setDateOrder] = useState<DateOrder>('asc');
 
   const planById = useMemo(() => new Map((plans ?? []).map((p) => [p.id, p])), [plans]);
 
@@ -80,31 +86,23 @@ export function KipAppReadyPage() {
     [activities, skpPeriod]
   );
 
-  const groups: PlanGroup[] = useMemo(() => {
-    const byPlan = new Map<string, Activity[]>();
-    for (const activity of periodActivities) {
-      const key = activity.performancePlanId ?? '__none__';
-      const list = byPlan.get(key) ?? [];
-      list.push(activity);
-      byPlan.set(key, list);
-    }
-    const result: PlanGroup[] = [];
-    for (const [key, list] of byPlan) {
-      list.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
-      result.push({
-        plan: key === '__none__' ? null : (planById.get(key) ?? null),
-        activities: list,
-      });
-    }
-    result.sort((a, b) => {
-      if (!a.plan) return 1;
-      if (!b.plan) return -1;
-      return a.plan.sortOrder - b.plan.sortOrder;
-    });
-    return result;
-  }, [periodActivities, planById]);
+  const groups = useMemo(
+    () => groupActivitiesByPlan(periodActivities, planById, dateOrder),
+    [periodActivities, planById, dateOrder]
+  );
 
-  const flatOrder = useMemo(() => groups.flatMap((g) => g.activities.map((a) => a.id)), [groups]);
+  const dateGroups = useMemo(
+    () => groupActivitiesByDate(periodActivities, dateOrder),
+    [periodActivities, dateOrder]
+  );
+
+  const flatOrder = useMemo(
+    () =>
+      groupBy === 'tanggal'
+        ? dateGroups.flatMap((g) => g.activities.map((a) => a.id))
+        : groups.flatMap((g) => g.activities.map((a) => a.id)),
+    [groups, dateGroups, groupBy]
+  );
 
   const totalActivities = periodActivities.length;
   const reportedActivities = periodActivities.filter((a) => a.status === 'reported').length;
@@ -246,6 +244,55 @@ export function KipAppReadyPage() {
     );
   }
 
+  function renderDateGroup(group: DateGroup) {
+    const gid = `tanggal:${group.date}`;
+    const total = group.activities.length;
+    const reported = group.activities.filter((a) => a.status === 'reported').length;
+    const collapsed = isCollapsed(gid, total > 0 && reported === total);
+
+    return (
+      <div key={gid} className="rounded-card border border-border">
+        <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+          <button
+            type="button"
+            onClick={() => toggleGroup(gid, collapsed)}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          >
+            {collapsed ? (
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            ) : (
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            )}
+            <span className="truncate text-sm font-medium">{formatIndonesianDate(group.date)}</span>
+            <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs">
+              {reported}/{total}
+            </span>
+          </button>
+        </div>
+        {!collapsed ? (
+          <div className="space-y-3 border-t border-border p-3">
+            {group.activities.map((activity) => (
+              <CopyModePanel
+                key={activity.id}
+                activity={activity}
+                plan={
+                  activity.performancePlanId
+                    ? (planById.get(activity.performancePlanId) ?? null)
+                    : null
+                }
+                isFocused={focusedId === activity.id}
+                requireEvidenceLinkForReady={settings?.requireEvidenceLinkForReady ?? true}
+                onFocus={() => setFocusedId(activity.id)}
+                onMarkReported={() => void markActivityReported(activity.id)}
+                onUnmarkReported={() => void unmarkActivityReported(activity.id)}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
@@ -314,10 +361,36 @@ export function KipAppReadyPage() {
             </SelectContent>
           </Select>
         </div>
-        <label className="flex items-center gap-2 pb-2 text-sm">
-          <Switch checked={groupByLeader} onCheckedChange={setGroupByLeader} />
-          Kelompokkan per Ketua Tim
-        </label>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">Kelompokkan</label>
+          <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="rk">Rencana Kinerja</SelectItem>
+              <SelectItem value="tanggal">Tanggal</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">Urutan tanggal</label>
+          <Select value={dateOrder} onValueChange={(v) => setDateOrder(v as DateOrder)}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="asc">Terlama dulu</SelectItem>
+              <SelectItem value="desc">Terbaru dulu</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {groupBy === 'rk' ? (
+          <label className="flex items-center gap-2 pb-2 text-sm">
+            <Switch checked={groupByLeader} onCheckedChange={setGroupByLeader} />
+            Kelompokkan per Ketua Tim
+          </label>
+        ) : null}
         <p className="pb-2 text-xs text-muted-foreground">
           {reportedActivities} dari {totalActivities} kegiatan sudah ditandai · RK {completedPlans}{' '}
           dari {totalPlans}
@@ -338,6 +411,8 @@ export function KipAppReadyPage() {
             </Button>
           }
         />
+      ) : groupBy === 'tanggal' ? (
+        <div className="space-y-3">{dateGroups.map(renderDateGroup)}</div>
       ) : groupByLeader && leaderGroups ? (
         <div className="space-y-6">
           {[...leaderGroups.entries()].map(([leader, leaderPlanGroups]) => {
