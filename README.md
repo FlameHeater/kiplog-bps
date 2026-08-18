@@ -199,6 +199,11 @@ berbagi folder sebelum menempelkan tautan.
 - **KipLog tidak mengunggah berkas Data Dukung ke Drive secara otomatis** — folder sinkron hanya berisi data KipLog dan bukti dukung mentah; berkas PDF Data Dukung yang tautannya dipakai di KipApp tetap diunggah pengguna sendiri.
 - Status "Sudah diinput ke KipApp" adalah **penanda manual**, bukan konfirmasi bahwa KipApp benar-benar menerima data.
 
+## Yang sedang menggantung
+
+[docs/TODO.md](docs/TODO.md) — daftar hal yang menunggu percobaan atau
+keputusan pemilik proyek, beserta utang teknis yang sudah diketahui.
+
 ## Roadmap
 
 7 fase implementasi bertahap — lihat [PRD §20](PRD-KipLog-BPS-v3.1.md) dan
