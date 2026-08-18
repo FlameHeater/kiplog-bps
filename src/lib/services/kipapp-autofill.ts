@@ -105,6 +105,61 @@ export function serializeAutofillPayload(payload: KipAppAutofillPayload): string
   return JSON.stringify(payload, null, 2);
 }
 
+/** Versi payload jamak — satu salinan untuk sebulan penuh. */
+const BATCH_VERSION = 2;
+
+export interface KipAppAutofillBatch {
+  kiplogAutofill: number;
+  items: KipAppAutofillPayload[];
+}
+
+export interface BatchBuildResult {
+  batch: KipAppAutofillBatch;
+  skipped: { description: string; reason: string }[];
+}
+
+/**
+ * Menyusun antrean sebulan.
+ *
+ * Diurutkan menurut tanggal lalu jam, bukan per RK, karena antreannya
+ * dikerjakan berurutan waktu di KipApp — pengguna menekan Add, mengisi,
+ * menyimpan, lalu lanjut ke kegiatan berikutnya.
+ *
+ * Kegiatan yang tidak layak kirim DIKELUARKAN beserta alasannya, bukan
+ * disertakan diam-diam: memasukkan kegiatan yang sudah dikirim untuk dinilai
+ * atau yang capaiannya kosong hanya akan menuntun pengguna ke pekerjaan yang
+ * pasti gagal di tengah antrean panjang.
+ */
+export function buildAutofillBatch(
+  activities: Activity[],
+  planById: Map<string, PerformancePlan>
+): BatchBuildResult {
+  const items: KipAppAutofillPayload[] = [];
+  const skipped: { description: string; reason: string }[] = [];
+
+  const ordered = [...activities].sort(
+    (a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)
+  );
+
+  for (const activity of ordered) {
+    const reason = autofillBlockedReason(activity);
+    if (reason) {
+      skipped.push({ description: activity.description, reason });
+      continue;
+    }
+    const plan = activity.performancePlanId
+      ? (planById.get(activity.performancePlanId) ?? null)
+      : null;
+    items.push(buildAutofillPayload(activity, plan));
+  }
+
+  return { batch: { kiplogAutofill: BATCH_VERSION, items }, skipped };
+}
+
+export function serializeAutofillBatch(batch: KipAppAutofillBatch): string {
+  return JSON.stringify(batch, null, 2);
+}
+
 /**
  * Kenapa kegiatan ini tidak boleh dikirim ke KipApp.
  *
@@ -558,6 +613,22 @@ export const AUTOFILL_SCRIPT = `(function () {
     'background:#0f172a;color:#fff;font-weight:600;cursor:pointer">Isi Form</button>' +
     '<button id="kiplog-diag" style="margin-top:6px;width:100%;padding:6px;border:1px solid #cbd5e1;' +
     'border-radius:6px;background:#fff;color:#0f172a;cursor:pointer">Salin diagnosa (kalau ada yang gagal)</button>' +
+    '<div id="kiplog-queue" style="display:none">' +
+      '<div id="kiplog-progress" style="font-weight:600"></div>' +
+      '<div id="kiplog-current" style="color:#475569;margin:4px 0 8px"></div>' +
+      '<button id="kiplog-fill" style="width:100%;padding:8px;border:0;border-radius:6px;' +
+      'background:#0f172a;color:#fff;font-weight:600;cursor:pointer">Isi Form</button>' +
+      '<div style="display:flex;gap:6px;margin-top:6px">' +
+        '<button id="kiplog-prev" style="flex:1;padding:6px;border:1px solid #cbd5e1;border-radius:6px;' +
+        'background:#fff;cursor:pointer">&lsaquo; Sebelumnya</button>' +
+        '<button id="kiplog-next" style="flex:2;padding:6px;border:1px solid #0f172a;border-radius:6px;' +
+        'background:#fff;font-weight:600;cursor:pointer">Berikutnya &rsaquo;</button>' +
+      '</div>' +
+      '<button id="kiplog-nextday" style="width:100%;margin-top:6px;padding:6px;border:1px solid #cbd5e1;' +
+      'border-radius:6px;background:#fff;cursor:pointer">Lompat ke tanggal berikutnya &raquo;</button>' +
+      '<button id="kiplog-quit" style="width:100%;margin-top:6px;padding:6px;border:0;' +
+      'border-radius:6px;background:none;color:#64748b;cursor:pointer">Tutup antrean</button>' +
+    '</div>' +
     '<div id="kiplog-out" style="margin-top:8px;white-space:pre-wrap"></div>';
   document.body.appendChild(panel);
 
@@ -601,18 +672,150 @@ export const AUTOFILL_SCRIPT = `(function () {
     box.select();
   };
 
+  /**
+   * Antrean sebulan.
+   *
+   * KipApp hanya menerima satu kegiatan per dialog: tekan Add, isi, Save,
+   * ulangi. Jadi yang bisa diringkas bukan pengisiannya melainkan
+   * PENYIAPANNYA — sekali salin untuk sebulan, lalu antreannya yang mengingat
+   * sudah sampai mana, bukan pengguna.
+   *
+   * Posisi disimpan di localStorage supaya antrean selamat kalau halaman
+   * dimuat ulang di tengah jalan; tanpa itu pengguna harus menghitung sendiri
+   * sudah sampai kegiatan ke berapa dari dua puluhan.
+   */
+  var QUEUE_KEY = 'kiplog-autofill-queue';
+  var MONTHS = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  var queue = null;
+
+  function tanggalIndonesia(iso) {
+    var parts = String(iso).split('-');
+    if (parts.length !== 3) return iso;
+    return Number(parts[2]) + ' ' + (MONTHS[Number(parts[1]) - 1] || parts[1]) + ' ' + parts[0];
+  }
+
+  function queueSignature(items) {
+    return items.length + '|' + (items[0] ? items[0].tanggal : '') + '|' +
+      (items[items.length - 1] ? items[items.length - 1].tanggal : '');
+  }
+
+  function saveProgress() {
+    if (!queue) return;
+    try {
+      localStorage.setItem(QUEUE_KEY, JSON.stringify({ key: queue.key, index: queue.index }));
+    } catch (e) { /* penyimpanan diblokir: antrean tetap jalan, hanya tidak selamat dari reload */ }
+  }
+
+  function restoreIndex(key, max) {
+    try {
+      var raw = localStorage.getItem(QUEUE_KEY);
+      if (!raw) return 0;
+      var saved = JSON.parse(raw);
+      if (!saved || saved.key !== key) return 0;
+      return Math.min(Math.max(saved.index || 0, 0), max);
+    } catch (e) { return 0; }
+  }
+
+  function dayNumbers(items, index) {
+    var dates = [];
+    for (var i = 0; i < items.length; i++) {
+      if (dates.indexOf(items[i].tanggal) === -1) dates.push(items[i].tanggal);
+    }
+    return { total: dates.length, current: dates.indexOf(items[index].tanggal) + 1 };
+  }
+
+  function hint(text) {
+    out.innerHTML = '<span style="color:#475569">' + text + '</span>';
+  }
+
+  function renderQueue() {
+    if (!queue) return;
+    var item = queue.items[queue.index];
+    var days = dayNumbers(queue.items, queue.index);
+    panel.querySelector('#kiplog-progress').textContent =
+      'Kegiatan ' + (queue.index + 1) + ' dari ' + queue.items.length +
+      ' \\u00b7 hari ' + days.current + ' dari ' + days.total;
+    panel.querySelector('#kiplog-current').textContent =
+      tanggalIndonesia(item.tanggal) + ' \\u2014 ' + item.kegiatan;
+    panel.querySelector('#kiplog-prev').disabled = queue.index === 0;
+    panel.querySelector('#kiplog-next').disabled = queue.index >= queue.items.length - 1;
+  }
+
+  function startQueue(items) {
+    queue = { items: items, index: 0, key: queueSignature(items) };
+    queue.index = restoreIndex(queue.key, items.length - 1);
+    panel.querySelector('#kiplog-in').style.display = 'none';
+    panel.querySelector('#kiplog-go').style.display = 'none';
+    panel.querySelector('#kiplog-queue').style.display = 'block';
+    renderQueue();
+    hint(queue.index > 0
+      ? 'Dilanjutkan dari posisi terakhir. Tekan Add di KipApp, lalu Isi Form.'
+      : 'Tekan Add di KipApp, lalu Isi Form.');
+  }
+
+  function stopQueue() {
+    queue = null;
+    try { localStorage.removeItem(QUEUE_KEY); } catch (e) { /* diabaikan */ }
+    panel.querySelector('#kiplog-queue').style.display = 'none';
+    panel.querySelector('#kiplog-in').style.display = '';
+    panel.querySelector('#kiplog-go').style.display = '';
+    panel.querySelector('#kiplog-in').value = '';
+    out.textContent = 'Antrean ditutup.';
+  }
+
+  function move(delta) {
+    if (!queue) return;
+    queue.index = Math.min(Math.max(queue.index + delta, 0), queue.items.length - 1);
+    saveProgress();
+    renderQueue();
+    hint('Tekan Add di KipApp, lalu Isi Form.');
+  }
+
+  function jumpNextDay() {
+    if (!queue) return;
+    var today = queue.items[queue.index].tanggal;
+    for (var i = queue.index + 1; i < queue.items.length; i++) {
+      if (queue.items[i].tanggal !== today) {
+        queue.index = i;
+        saveProgress();
+        renderQueue();
+        hint('Tekan Add di KipApp, lalu Isi Form.');
+        return;
+      }
+    }
+    hint('Sudah di tanggal terakhir.');
+  }
+
+  function report(done, failed, notes) {
+    out.innerHTML = '<b>Terisi:</b> ' + (done.length ? done.join(', ') : '\\u2014') +
+      (failed.length ? '<br><b style="color:#b45309">Gagal:</b> ' + failed.join('; ') : '') +
+      (notes.length ? '<br><b style="color:#b45309">Catatan:</b> ' + notes.join('; ') : '') +
+      '<br><span style="color:#475569">Sudah diperiksa ulang, bukan sekadar dicoba. Tekan Save sendiri' +
+      (queue ? ', lalu Berikutnya.' : '.') + '</span>';
+  }
+
+  panel.querySelector('#kiplog-fill').onclick = function () {
+    if (!queue) return;
+    out.textContent = 'Mengisi\\u2026 Rencana Kinerja dan Tanggal perlu beberapa detik.';
+    apply(queue.items[queue.index], report);
+  };
+  panel.querySelector('#kiplog-prev').onclick = function () { move(-1); };
+  panel.querySelector('#kiplog-next').onclick = function () { move(1); };
+  panel.querySelector('#kiplog-nextday').onclick = jumpNextDay;
+  panel.querySelector('#kiplog-quit').onclick = stopQueue;
+
   panel.querySelector('#kiplog-go').onclick = function () {
     var raw = panel.querySelector('#kiplog-in').value;
     var data;
     try { data = JSON.parse(raw); } catch (e) { out.textContent = 'Data tidak bisa dibaca (JSON tidak valid).'; return; }
     if (!data || !data.kiplogAutofill) { out.textContent = 'Ini bukan data autofill dari KipLog.'; return; }
+    if (data.items) {
+      if (!data.items.length) { out.textContent = 'Antrean kosong: tidak ada kegiatan yang siap dikirim.'; return; }
+      startQueue(data.items);
+      return;
+    }
     out.textContent = 'Mengisi\\u2026 Rencana Kinerja dan Tanggal perlu beberapa detik.';
-    apply(data, function (done, failed, notes) {
-      out.innerHTML = '<b>Terisi:</b> ' + (done.length ? done.join(', ') : '\\u2014') +
-        (failed.length ? '<br><b style="color:#b45309">Gagal:</b> ' + failed.join('; ') : '') +
-        (notes.length ? '<br><b style="color:#b45309">Catatan:</b> ' + notes.join('; ') : '') +
-        '<br><span style="color:#475569">Yang tertulis di atas sudah diperiksa ulang, bukan sekadar dicoba. Tekan Save sendiri.</span>';
-    });
+    apply(data, report);
   };
   panel.querySelector('#kiplog-in').focus();
 })();`;

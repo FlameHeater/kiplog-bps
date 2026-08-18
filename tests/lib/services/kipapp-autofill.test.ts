@@ -7,7 +7,9 @@ import {
   AUTOFILL_SCRIPT,
   autofillBlockedReason,
   buildAutofillPayload,
+  buildAutofillBatch,
   buildBookmarkletHref,
+  serializeAutofillBatch,
   serializeAutofillPayload,
 } from '@/lib/services/kipapp-autofill';
 import type { Activity, PerformancePlan } from '@/types';
@@ -74,6 +76,40 @@ describe('autofillBlockedReason', () => {
 
   it('meloloskan kegiatan yang lengkap', () => {
     expect(autofillBlockedReason(activity)).toBeNull();
+  });
+});
+
+describe('buildAutofillBatch', () => {
+  const other = {
+    ...activity,
+    id: '33333333-3333-4333-8333-333333333333',
+    date: '2026-08-15',
+    description: 'Kegiatan lebih awal',
+  };
+  const planById = new Map([[plan.id, plan]]);
+
+  it('mengurutkan antrean menurut tanggal, bukan urutan masukan', () => {
+    // Antreannya dikerjakan berurutan waktu di KipApp, bukan per RK.
+    const { batch } = buildAutofillBatch([activity, other], planById);
+    expect(batch.items.map((i) => i.tanggal)).toEqual(['2026-08-15', '2026-08-17']);
+  });
+
+  it('mengeluarkan kegiatan yang belum siap kirim beserta alasannya', () => {
+    const sent = { ...other, sentForReview: true };
+    const { batch, skipped } = buildAutofillBatch([activity, sent], planById);
+    expect(batch.items).toHaveLength(1);
+    expect(skipped[0]?.reason).toMatch(/dikirim untuk dinilai/i);
+  });
+
+  it('menyertakan nama RK tiap kegiatan, karena RK dipilih di dalam dialog', () => {
+    const { batch } = buildAutofillBatch([activity], planById);
+    expect(batch.items[0]?.rencanaKinerja).toBe(plan.name);
+  });
+
+  it('menandai dirinya sebagai antrean supaya bookmarklet bisa membedakannya', () => {
+    const { batch } = buildAutofillBatch([activity], planById);
+    expect(batch.kiplogAutofill).toBe(2);
+    expect(Array.isArray(batch.items)).toBe(true);
   });
 });
 
@@ -414,6 +450,75 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     const out = document.querySelector('#kiplog-out')!.textContent!;
     expect(out).toContain('Tanggal');
     expect(out.split('Gagal:')[0]).not.toContain('Tanggal');
+  });
+
+  it('membuka antrean saat yang ditempel adalah data sebulan', () => {
+    const second = { ...activity, date: '2026-08-18', description: 'Kegiatan hari berikutnya' };
+    const { batch } = buildAutofillBatch([activity, second], new Map([[plan.id, plan]]));
+    runBookmarklet(serializeAutofillBatch(batch));
+
+    expect(document.querySelector<HTMLElement>('#kiplog-queue')!.style.display).toBe('block');
+    expect(document.querySelector('#kiplog-progress')!.textContent).toContain('Kegiatan 1 dari 2');
+    expect(document.querySelector('#kiplog-current')!.textContent).toContain('17 Agustus 2026');
+  });
+
+  it('mengisi kegiatan yang sedang aktif, lalu kegiatan berikutnya setelah ditekan Berikutnya', () => {
+    const second = {
+      ...activity,
+      date: '2026-08-18',
+      description: 'Kegiatan hari berikutnya',
+    };
+    const { batch } = buildAutofillBatch([activity, second], new Map([[plan.id, plan]]));
+    runBookmarklet(serializeAutofillBatch(batch));
+
+    document.querySelector<HTMLButtonElement>('#kiplog-fill')!.click();
+    vi.runAllTimers();
+    expect(dateValue()).toBe('2026-08-17');
+
+    document.querySelector<HTMLButtonElement>('#kiplog-next')!.click();
+    expect(document.querySelector('#kiplog-progress')!.textContent).toContain('Kegiatan 2 dari 2');
+
+    document.querySelector<HTMLButtonElement>('#kiplog-fill')!.click();
+    vi.runAllTimers();
+    expect(dateValue()).toBe('2026-08-18');
+    expect(document.querySelector<HTMLTextAreaElement>('#f-keg')!.value).toBe(second.description);
+  });
+
+  it('melompat ke tanggal berikutnya, melewati sisa kegiatan di hari yang sama', () => {
+    const sameDay = {
+      ...activity,
+      description: 'Kegiatan kedua hari yang sama',
+      startTime: '13:00',
+    };
+    const nextDay = { ...activity, date: '2026-08-18', description: 'Kegiatan besok' };
+    const { batch } = buildAutofillBatch([activity, sameDay, nextDay], new Map([[plan.id, plan]]));
+    runBookmarklet(serializeAutofillBatch(batch));
+
+    document.querySelector<HTMLButtonElement>('#kiplog-nextday')!.click();
+
+    expect(document.querySelector('#kiplog-progress')!.textContent).toContain('Kegiatan 3 dari 3');
+    expect(document.querySelector('#kiplog-current')!.textContent).toContain('18 Agustus 2026');
+  });
+
+  it('melanjutkan dari posisi terakhir setelah halaman dimuat ulang', () => {
+    const second = { ...activity, date: '2026-08-18', description: 'Kegiatan hari berikutnya' };
+    const { batch } = buildAutofillBatch([activity, second], new Map([[plan.id, plan]]));
+
+    runBookmarklet(serializeAutofillBatch(batch));
+    document.querySelector<HTMLButtonElement>('#kiplog-next')!.click();
+
+    // Tiru muat ulang: panel hilang, antrean dijalankan lagi dari awal.
+    document.getElementById('kiplog-autofill-panel')!.remove();
+    runBookmarklet(serializeAutofillBatch(batch));
+
+    expect(document.querySelector('#kiplog-progress')!.textContent).toContain('Kegiatan 2 dari 2');
+    expect(document.querySelector('#kiplog-out')!.textContent).toContain('Dilanjutkan');
+  });
+
+  it('menolak antrean kosong alih-alih membuka panel yang tidak bisa dipakai', () => {
+    runBookmarklet(JSON.stringify({ kiplogAutofill: 2, items: [] }));
+    expect(document.querySelector('#kiplog-out')!.textContent).toContain('Antrean kosong');
+    expect(document.querySelector<HTMLElement>('#kiplog-queue')!.style.display).toBe('none');
   });
 
   it('TIDAK menekan Save', () => {

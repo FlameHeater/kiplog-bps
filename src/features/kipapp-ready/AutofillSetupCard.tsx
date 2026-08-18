@@ -55,7 +55,8 @@ export function AutofillSetupCard() {
               Periode SKP, dan Rencana Kinerja, lalu klik <strong>Add</strong>.
             </li>
             <li>
-              Di kartu kegiatan pada halaman ini, tekan <strong>Salin untuk Autofill</strong>.
+              Tekan <strong>Salin sebulan untuk Autofill</strong> untuk seluruh periode, atau{' '}
+              <strong>Salin untuk Autofill</strong> di satu kartu kegiatan saja.
             </li>
             <li>
               Kembali ke KipApp, klik bookmark tadi, tempel data ke kotak yang muncul, tekan{' '}
@@ -63,6 +64,13 @@ export function AutofillSetupCard() {
             </li>
             <li>
               Periksa isinya, lalu tekan <strong>Save</strong> di KipApp sendiri.
+            </li>
+            <li>
+              Untuk data sebulan: panel menampilkan <em>kegiatan ke berapa dari berapa</em> dan{' '}
+              <em>hari ke berapa</em>. Setelah Save, tekan <strong>Berikutnya</strong> (atau{' '}
+              <strong>Lompat ke tanggal berikutnya</strong>), tekan <strong>Add</strong> lagi di
+              KipApp, lalu <strong>Isi Form</strong> — dan seterusnya. Posisinya diingat, jadi
+              antrean tetap lanjut walau halaman dimuat ulang.
             </li>
           </ol>
 

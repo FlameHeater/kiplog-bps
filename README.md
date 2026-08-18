@@ -105,6 +105,14 @@ perlu ditempel satu per satu. Alurnya: buka form Add di KipApp → tekan "Salin
 untuk Autofill" di KipLog → klik bookmarklet di tab KipApp → tempel → "Isi
 Form" → **Anda** yang menekan Save.
 
+Untuk sebulan sekaligus, tekan **"Salin sebulan untuk Autofill"**. KipApp hanya
+menerima satu kegiatan per dialog, jadi yang diringkas adalah penyiapannya:
+sekali salin, lalu panel bookmarklet menampilkan kegiatan ke berapa dari
+berapa dan hari ke berapa, dengan tombol **Berikutnya** dan **Lompat ke
+tanggal berikutnya**. Posisi antrean diingat, jadi tetap lanjut walau halaman
+dimuat ulang. Kegiatan yang belum siap kirim dikeluarkan dari antrean beserta
+alasannya, bukan disertakan diam-diam.
+
 Label, urutan, dan jenis kontrol field diambil dari tangkapan layar dialog itu
 di `Panduan KipApp - Pengguna V.3.1.pdf` halaman 66, lalu dikoreksi dua kali:
 terhadap tangkapan layar form sungguhan KipApp v2.0.4 (2026), dan terhadap

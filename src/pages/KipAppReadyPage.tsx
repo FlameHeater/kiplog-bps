@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Copy, Lock, LockOpen } from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, Lock, LockOpen, Wand2 } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import { useSkpPeriod } from '@/hooks/useSkpPeriod';
 import { usePlanPeriodStatuses } from '@/hooks/usePlanPeriodStatuses';
 import { CopyModePanel } from '@/features/kipapp-ready/CopyModePanel';
 import { AutofillSetupCard } from '@/features/kipapp-ready/AutofillSetupCard';
+import { buildAutofillBatch, serializeAutofillBatch } from '@/lib/services/kipapp-autofill';
 import {
   markActivityReported,
   setPeriodLocked,
@@ -78,6 +79,7 @@ export function KipAppReadyPage() {
   const [groupByLeader, setGroupByLeader] = useState(false);
   const [groupBy, setGroupBy] = useState<GroupBy>('rk');
   const [dateOrder, setDateOrder] = useState<DateOrder>('asc');
+  const [batchNote, setBatchNote] = useState<string | null>(null);
 
   const planById = useMemo(() => new Map((plans ?? []).map((p) => [p.id, p])), [plans]);
 
@@ -110,6 +112,30 @@ export function KipAppReadyPage() {
   const completedPlans = groups.filter(
     (g) => g.plan && g.activities.every((a) => a.status === 'reported')
   ).length;
+
+  /**
+   * Menyalin seluruh periode sebagai satu antrean.
+   *
+   * Bookmarklet yang membaginya jadi sesi, bukan halaman ini: KipApp hanya
+   * menerima satu kegiatan per dialog, jadi yang bisa diringkas adalah
+   * penyiapannya — sekali salin, lalu antreannya yang mengingat sudah sampai
+   * mana.
+   */
+  async function copyBatch() {
+    const { batch, skipped } = buildAutofillBatch(periodActivities, planById);
+    if (batch.items.length === 0) {
+      setBatchNote('Tidak ada kegiatan yang siap dikirim pada periode ini.');
+      return;
+    }
+    const copied = await copyToClipboard(serializeAutofillBatch(batch));
+    setBatchNote(
+      copied
+        ? `${batch.items.length} kegiatan tersalin sebagai antrean` +
+            (skipped.length > 0 ? ` · ${skipped.length} dilewati (belum siap kirim)` : '') +
+            '. Tempel sekali di panel bookmarklet KipApp.'
+        : 'Gagal menyalin ke papan klip.'
+    );
+  }
 
   function groupId(plan: PerformancePlan | null): string {
     return plan?.id ?? '__none__';
@@ -328,6 +354,17 @@ export function KipAppReadyPage() {
 
       <div className="mb-4">
         <AutofillSetupCard />
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-card border border-border bg-card p-3">
+        <Button type="button" size="sm" onClick={() => void copyBatch()}>
+          <Wand2 className="h-4 w-4" aria-hidden="true" />
+          Salin sebulan untuk Autofill
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          {batchNote ??
+            'Sekali salin untuk seluruh periode; panel bookmarklet di KipApp yang membaginya per kegiatan dan per tanggal.'}
+        </p>
       </div>
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
