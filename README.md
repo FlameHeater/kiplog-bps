@@ -120,7 +120,7 @@ Batasnya, dan ini disengaja:
 
 - Skrip menolak berjalan di host selain `kipapp.bps.go.id` dan `webapps.bps.go.id` (KipApp dapat diakses lewat keduanya).
 - Skrip hanya **menulis** ke field — tidak membaca data KipApp dan tidak mengirim apa pun ke mana pun.
-- Skrip **tidak menekan Save**. Pencocokan field bertumpu pada teks label yang terlihat, dan tata letak KipApp bisa berubah tanpa pemberitahuan; karena itu pemeriksaan akhir tetap milik pengguna.
+- Skrip **tidak menekan Save**. Pencocokan bertumpu pada kerangka Ant Design yang dipakai KipApp, dan tata letak itu bisa berubah tanpa pemberitahuan; karena itu pemeriksaan akhir tetap milik pengguna. Setiap field dibaca ulang setelah diisi, jadi laporan "Terisi" berarti sudah diperiksa, bukan sekadar dicoba.
 - Field yang gagal ditemukan dilaporkan, tidak didiamkan.
 - Tidak ada kredensial KipApp yang diminta atau disimpan. Tidak ada scraping, tidak ada headless browser, tidak ada login otomatis.
 - Kegiatan yang sudah dikirim untuk dinilai ditolak, karena KipApp sendiri tidak mengizinkan perubahan setelah itu.

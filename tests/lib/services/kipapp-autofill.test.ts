@@ -86,48 +86,96 @@ describe('buildBookmarkletHref', () => {
 });
 
 /**
- * Tiruan dialog "Add Capaian Kegiatan Perhari" KipApp v2.0.4, dibangun dari
- * tiga tangkapan layar form sungguhan. Yang ditirukan bukan sekadar tampilan
- * melainkan PERILAKUNYA, karena justru perilaku itu yang membuat percobaan
- * pertama pengguna gagal:
+ * Tiruan dialog "Add Capaian Kegiatan Perhari" memakai kerangka **Ant Design
+ * Vue 1.x yang sebenarnya**, disalin dari `outerHTML` halaman KipApp yang
+ * dikirim pemilik proyek. Sebelumnya tiruan ini memakai `<select>` dan
+ * `input type=date` biasa — itulah sebabnya test hijau berkali-kali sementara
+ * form sungguhan gagal.
  *
- * - **Rencana Kinerja bukan `<select>`** melainkan combobox: kotak teks yang
- *   baru memunculkan daftar opsi setelah diklik, menyaring saat diketik, dan
- *   hanya benar-benar memilih ketika opsinya DIKLIK.
- * - **Tanggal bukan input `date`** melainkan pemicu kalender: klik membuka
- *   popup yang punya kotak isian sendiri; nilai baru masuk ke field aslinya
- *   setelah Enter ditekan di kotak itu.
- * - Jam Mulai/Jam Selesai belum ada di DOM sampai "Gunakan jam" dicentang.
- * - Bintang wajib adalah elemen tersendiri di dalam label.
- * - Dua checkbox pengalih duduk di baris yang sama.
+ * Perilaku yang ditirukan, semuanya sebab kegagalan nyata:
+ *
+ * - Label dan kontrol duduk di dua `ant-col` bersaudara di dalam satu `ant-row`.
+ * - Combobox `ant-select` menyembunyikan kotak pencarian di dalamnya; daftar
+ *   opsinya dipasang di `<body>`, bukan di dalam dialog; memilih hanya terjadi
+ *   saat opsi DIKLIK.
+ * - Pemicu tanggal dan jam **readonly** — nilai hanya masuk lewat kotak isian
+ *   di dalam popup.
+ * - Checkbox menyembunyikan input aslinya di balik `ant-checkbox-inner`.
+ * - Jam Mulai/Selesai belum ada di DOM sampai "Gunakan jam" dicentang.
  */
 function renderFakeKipAppDialog(): void {
   document.body.innerHTML = `
-    <div class="modal">
-      <h3>Add Capaian Kegiatan Perhari</h3>
-      <div class="row"><label>Pegawai:</label><span>[340063146] Nama Pegawai</span></div>
-      <div class="row"><label>Tahun:</label><span>2026</span></div>
-      <div class="row"><label>SKP:</label><span>1 April - 30 Juni (Triwulan II)</span></div>
-      <div class="row"><label><i>*</i> Rencana Kinerja:</label>
-        <input id="f-rk" type="text" placeholder="Pilih rencana kinerja SKP" />
-        <div id="rk-pop"></div>
+    <div class="ant-modal-wrap">
+      <div class="ant-modal">
+        <div class="ant-modal-content">
+          <div class="ant-modal-header"><div class="ant-modal-title">Add Capaian Kegiatan Perhari</div></div>
+          <div class="ant-modal-body">
+            <div class="ant-row"><div class="ant-col ant-col-md-6">Pegawai:</div><div class="ant-col ant-col-md-18">[340063146] Nama Pegawai</div></div>
+            <div class="ant-row"><div class="ant-col ant-col-md-6">Tahun:</div><div class="ant-col ant-col-md-18">2026</div></div>
+            <div class="ant-row"><div class="ant-col ant-col-md-6">SKP:</div><div class="ant-col ant-col-md-18">1 April - 30 Juni (Triwulan II)</div></div>
+
+            <div class="ant-row">
+              <div class="ant-col ant-col-md-6"><span style="color:red">*</span> Rencana Kinerja:</div>
+              <div class="ant-col ant-col-md-18">
+                <div class="ant-select ant-select-enabled" id="rk-select">
+                  <div class="ant-select-selection ant-select-selection--single">
+                    <div class="ant-select-selection__rendered">
+                      <div class="ant-select-selection__placeholder">Pilih rencana kinerja SKP</div>
+                      <div class="ant-select-search ant-select-search--inline" style="display:none">
+                        <div class="ant-select-search__field__wrap">
+                          <input autocomplete="off" value="" class="ant-select-search__field" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="ant-row">
+              <div class="ant-col ant-col-md-24">
+                <label class="ant-checkbox-wrapper"><span class="ant-checkbox"><input type="checkbox" class="ant-checkbox-input" id="cb-range" /><span class="ant-checkbox-inner"></span></span><span>Gunakan periode tanggal</span></label>
+                <label class="ant-checkbox-wrapper"><span class="ant-checkbox"><input type="checkbox" class="ant-checkbox-input" id="cb-jam" /><span class="ant-checkbox-inner"></span></span><span>Gunakan jam</span></label>
+              </div>
+            </div>
+
+            <div class="ant-row">
+              <div class="ant-col ant-col-md-6"><span style="color:red">*</span> Tanggal:</div>
+              <div class="ant-col ant-col-md-18">
+                <div class="ant-calendar-picker" id="date-picker">
+                  <div><input readonly class="ant-calendar-picker-input ant-input" placeholder="Pilih tanggal" /></div>
+                </div>
+              </div>
+            </div>
+
+            <div id="jam-slot"></div>
+
+            <div class="ant-row">
+              <div class="ant-col ant-col-md-6"><span style="color:red">*</span> Kegiatan:</div>
+              <div class="ant-col ant-col-md-18"><textarea class="ant-input" id="f-keg" placeholder="Deskripsi Kegiatan"></textarea></div>
+            </div>
+            <div class="ant-row">
+              <div class="ant-col ant-col-md-6"><span style="color:red">*</span> Progres:</div>
+              <div class="ant-col ant-col-md-18"><input class="ant-input" id="f-prog" value="100" /></div>
+            </div>
+            <div class="ant-row">
+              <div class="ant-col ant-col-md-6"><span style="color:red">*</span> Capaian:</div>
+              <div class="ant-col ant-col-md-18"><textarea class="ant-input" id="f-cap" placeholder="Deskripsi Capaian"></textarea></div>
+            </div>
+            <div class="ant-row">
+              <div class="ant-col ant-col-md-6">Data Dukung:</div>
+              <div class="ant-col ant-col-md-18"><input class="ant-input" id="f-link" placeholder="Link Data Dukung" /></div>
+            </div>
+            <div class="ant-row">
+              <div class="ant-col ant-col-md-6">Masukan ke capaian SKP:</div>
+              <div class="ant-col ant-col-md-18"><label class="ant-checkbox-wrapper"><span class="ant-checkbox"><input type="checkbox" class="ant-checkbox-input" id="f-skp" /><span class="ant-checkbox-inner"></span></span></label></div>
+            </div>
+
+            <button id="f-cancel">Cancel</button>
+            <button id="f-save">Save</button>
+          </div>
+        </div>
       </div>
-      <div class="row toggles">
-        <input id="f-range" type="checkbox" /><span>Gunakan periode tanggal</span>
-        <input id="f-usejam" type="checkbox" /><span>Gunakan jam</span>
-      </div>
-      <div class="row"><label><i>*</i> Tanggal:</label>
-        <input id="f-date" type="text" placeholder="Pilih tanggal" />
-        <div id="date-pop"></div>
-      </div>
-      <div id="jam-slot"></div>
-      <div class="row"><label><i>*</i> Kegiatan:</label><textarea id="f-keg" placeholder="Deskripsi Kegiatan"></textarea></div>
-      <div class="row"><label><i>*</i> Progres:</label><input id="f-prog" type="number" value="100" /></div>
-      <div class="row"><label><i>*</i> Capaian:</label><textarea id="f-cap" placeholder="Deskripsi Capaian"></textarea></div>
-      <div class="row"><label>Data Dukung:</label><input id="f-link" type="text" placeholder="Link Data Dukung" /></div>
-      <div class="row"><label>Masukan ke capaian SKP:</label><input id="f-skp" type="checkbox" /></div>
-      <button id="f-cancel">Cancel</button>
-      <button id="f-save">Save</button>
     </div>`;
 
   const RK_OPTIONS = [
@@ -136,92 +184,110 @@ function renderFakeKipAppDialog(): void {
     'Terlaksananya Kegiatan Statistik Jasa sesuai SOP dan tepat waktu',
   ];
 
-  // Combobox RK. Daftarnya di-portal ke <body>, seperti komponen sungguhan —
-  // bukan sebagai tetangga field-nya. Ini penting: kalau daftarnya bersarang
-  // di dekat kontrol, pemeriksaan "sudah terpilih" bisa lolos hanya karena
-  // teks opsi kebetulan ada di sekitar kontrol.
-  const rk = document.querySelector<HTMLInputElement>('#f-rk')!;
-  const rkPop = document.createElement('div');
-  rkPop.id = 'rk-portal';
-  document.body.appendChild(rkPop);
+  // Combobox: daftar opsi dipasang di <body>, seperti Ant Design sungguhan.
+  const select = document.querySelector<HTMLDivElement>('#rk-select')!;
+  const trigger = select.querySelector<HTMLDivElement>('.ant-select-selection')!;
+  const search = select.querySelector<HTMLInputElement>('.ant-select-search__field')!;
+  const dropdown = document.createElement('div');
+  dropdown.className = 'ant-select-dropdown';
+  document.body.appendChild(dropdown);
 
   function renderOptions() {
-    const query = rk.value.trim().toLowerCase();
-    rkPop.innerHTML = RK_OPTIONS.filter((o) => o.toLowerCase().includes(query))
-      .map((o) => `<div class="opt">${o}</div>`)
-      .join('');
-    for (const option of Array.from(rkPop.querySelectorAll<HTMLDivElement>('.opt'))) {
-      option.addEventListener('click', () => {
-        rk.setAttribute('data-selected', option.textContent!);
-        rk.value = option.textContent!;
-        rkPop.innerHTML = '';
+    const query = search.value.trim().toLowerCase();
+    dropdown.innerHTML =
+      '<ul class="ant-select-dropdown-menu">' +
+      RK_OPTIONS.filter((o) => o.toLowerCase().includes(query))
+        .map((o) => `<li class="ant-select-dropdown-menu-item">${o}</li>`)
+        .join('') +
+      '</ul>';
+    for (const item of Array.from(
+      dropdown.querySelectorAll<HTMLLIElement>('.ant-select-dropdown-menu-item')
+    )) {
+      item.addEventListener('click', () => {
+        const rendered = select.querySelector<HTMLDivElement>('.ant-select-selection__rendered')!;
+        const chosen = document.createElement('div');
+        chosen.className = 'ant-select-selection-selected-value';
+        chosen.textContent = item.textContent;
+        rendered.appendChild(chosen);
+        dropdown.innerHTML = '';
       });
     }
   }
-  rk.addEventListener('mousedown', renderOptions);
-  rk.addEventListener('input', () => {
-    // Mengetik hanya menyaring; TIDAK memilih apa pun.
-    rk.removeAttribute('data-selected');
-    renderOptions();
-  });
+  trigger.addEventListener('mousedown', renderOptions);
+  search.addEventListener('input', renderOptions);
 
-  // Kalender: klik membuka popup berisi kotak isian SENDIRI, di-portal ke
-  // <body>. Field aslinya MENOLAK diketik langsung — persis kelakuan yang
-  // membuat percobaan pengguna gagal, dan yang memaksa skrip mencoba popup.
-  const date = document.querySelector<HTMLInputElement>('#f-date')!;
-  const datePop = document.createElement('div');
-  datePop.id = 'date-portal';
-  document.body.appendChild(datePop);
-
-  date.addEventListener('input', () => {
-    // Nilai yang diketik langsung ke pemicunya dibuang.
-    date.value = '';
-  });
-  date.addEventListener('mousedown', () => {
-    datePop.innerHTML =
-      '<input id="date-inner" type="text" value="" /><div class="grid">1 2 3</div>';
-    const inner = document.querySelector<HTMLInputElement>('#date-inner')!;
+  // Pemilih tanggal: pemicunya readonly, nilai hanya masuk lewat popup + Enter.
+  const dateTrigger = document.querySelector<HTMLInputElement>('.ant-calendar-picker-input')!;
+  const datePopup = document.createElement('div');
+  datePopup.className = 'ant-calendar-picker-container';
+  document.body.appendChild(datePopup);
+  dateTrigger.addEventListener('mousedown', () => {
+    datePopup.innerHTML =
+      '<div class="ant-calendar"><input class="ant-calendar-input" placeholder="Pilih tanggal" /><div class="ant-calendar-body">1 2 3</div></div>';
+    const inner = datePopup.querySelector<HTMLInputElement>('.ant-calendar-input')!;
     inner.addEventListener('keydown', (e) => {
       if ((e as KeyboardEvent).key !== 'Enter') return;
-      date.setAttribute('data-committed', inner.value);
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
-        date,
+        dateTrigger,
         inner.value
       );
-      datePop.innerHTML = '';
+      datePopup.innerHTML = '';
     });
   });
 
-  // Field jam baru dibuat saat "Gunakan jam" dicentang.
-  const useJam = document.querySelector<HTMLInputElement>('#f-usejam')!;
+  // Field jam baru dibuat saat "Gunakan jam" dicentang, juga sebagai pemilih.
+  const jamCheckbox = document.querySelector<HTMLInputElement>('#cb-jam')!;
   const slot = document.querySelector<HTMLDivElement>('#jam-slot')!;
-  useJam.addEventListener('change', () => {
-    slot.innerHTML = useJam.checked
-      ? '<div class="row"><label><i>*</i> Jam Mulai:</label><input id="f-start" type="time" /></div>' +
-        '<div class="row"><label><i>*</i> Jam Selesai:</label><input id="f-end" type="time" /></div>'
-      : '';
+  const timePopup = document.createElement('div');
+  timePopup.className = 'ant-time-picker-panel';
+  document.body.appendChild(timePopup);
+
+  jamCheckbox.addEventListener('change', () => {
+    if (!jamCheckbox.checked) {
+      slot.innerHTML = '';
+      return;
+    }
+    slot.innerHTML = ['Jam Mulai', 'Jam Selesai']
+      .map(
+        (label, index) =>
+          `<div class="ant-row"><div class="ant-col ant-col-md-6"><span style="color:red">*</span> ${label}:</div>` +
+          `<div class="ant-col ant-col-md-18"><div class="ant-time-picker">` +
+          `<input readonly class="ant-time-picker-input" id="f-time-${index}" placeholder="Pilih jam" /></div></div></div>`
+      )
+      .join('');
+
+    for (const input of Array.from(
+      slot.querySelectorAll<HTMLInputElement>('.ant-time-picker-input')
+    )) {
+      input.addEventListener('mousedown', () => {
+        timePopup.innerHTML = '<input class="ant-time-picker-panel-input" />';
+        const inner = timePopup.querySelector<HTMLInputElement>('.ant-time-picker-panel-input')!;
+        inner.addEventListener('keydown', (e) => {
+          if ((e as KeyboardEvent).key !== 'Enter') return;
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+            input,
+            inner.value
+          );
+          timePopup.innerHTML = '';
+        });
+      });
+    }
   });
 }
 
 /**
- * Sidebar + halaman di belakang dialog, seperti pada tangkapan layar: menu
- * "Rencana Kinerja" dan filter halaman berlabel sama persis dengan field di
- * dialog. Tanpa pembatasan lingkup, autofill bisa mengisi filter halaman.
+ * Halaman Pelaksanaan di belakang dialog: filter "Rencana Kinerja" dan kolom
+ * tabel "Tanggal" dengan teks yang sama persis, seperti pada outerHTML asli.
  */
 function renderDecoyPage(): void {
   const decoy = document.createElement('div');
   decoy.innerHTML = `
-    <nav>
-      <a href="#">Rencana Kinerja</a>
-      <a href="#">RK Anggota</a>
-      <a href="#">Pelaksanaan</a>
-    </nav>
-    <div class="page">
-      <div class="row"><label>Rencana Kinerja</label>
-        <input id="page-rk" type="text" placeholder="Pilih rencana kinerja SKP" />
-      </div>
-      <div class="row"><label>Tanggal</label><input id="page-date" type="text" /></div>
-    </div>`;
+    <div class="ant-row"><div class="ant-col ant-col-md-4">Rencana Kinerja</div>
+      <div class="ant-col ant-col-md-20"><div class="ant-select" id="page-rk">
+        <div class="ant-select-selection"><div class="ant-select-selection__rendered">
+          <div class="ant-select-selection__placeholder">Pilih rencana kinerja SKP</div>
+        </div></div></div></div></div>
+    <table class="ant-table"><thead><tr><th><span class="ant-table-column-title">Tanggal</span></th></tr></thead></table>`;
   document.body.insertBefore(decoy, document.body.firstChild);
 }
 
@@ -244,7 +310,7 @@ function runBookmarklet(payload: string): void {
   vi.runAllTimers();
 }
 
-describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tiruan dialog KipApp)', () => {
+describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tiruan Ant Design KipApp)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     stubVisibility();
@@ -255,137 +321,99 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     vi.useRealTimers();
   });
 
+  const chosenRk = () =>
+    document.querySelector('#rk-select .ant-select-selection-selected-value')?.textContent ?? null;
+  const dateValue = () =>
+    document.querySelector<HTMLInputElement>('.ant-calendar-picker-input')!.value;
+  const jamChecked = () => document.querySelector<HTMLInputElement>('#cb-jam')!.checked;
+
   it('memilih Rencana Kinerja dengan MENGKLIK opsinya, bukan sekadar menulis nilainya', () => {
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
-    const rk = document.querySelector<HTMLInputElement>('#f-rk')!;
-    // data-selected hanya terisi lewat klik opsi — inilah beda antara
-    // "terlihat terisi" dan "benar-benar terpilih".
-    expect(rk.getAttribute('data-selected')).toBe(plan.name);
-    expect(rk.value).toBe(plan.name);
+    // Nilai ini hanya muncul kalau opsi benar-benar diklik — mengetik di kotak
+    // pencarian tidak memilih apa pun.
+    expect(chosenRk()).toBe(plan.name);
   });
 
-  it('mengisi Tanggal lewat kotak isian di dalam popup kalender, bukan ke fieldnya langsung', () => {
+  it('mengisi Tanggal lewat kotak isian di dalam popup, karena pemicunya readonly', () => {
+    expect(document.querySelector<HTMLInputElement>('.ant-calendar-picker-input')!.readOnly).toBe(
+      true
+    );
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
-    expect(document.querySelector<HTMLInputElement>('#f-date')!.value).toBe('2026-08-17');
+    expect(dateValue()).toBe('2026-08-17');
   });
 
-  it('mengisi field biasa lainnya', () => {
+  it('mengisi field teks biasa', () => {
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
     expect(document.querySelector<HTMLTextAreaElement>('#f-keg')!.value).toBe(activity.description);
     expect(document.querySelector<HTMLInputElement>('#f-prog')!.value).toBe('100');
     expect(document.querySelector<HTMLTextAreaElement>('#f-cap')!.value).toBe(activity.achievement);
     expect(document.querySelector<HTMLInputElement>('#f-link')!.value).toBe(activity.evidenceLink);
+  });
+
+  it('mencentang "Masukan ke capaian SKP" lewat lapisan yang menerima klik', () => {
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
     expect(document.querySelector<HTMLInputElement>('#f-skp')!.checked).toBe(true);
   });
 
-  it('mencentang "Gunakan jam" lebih dulu, lalu mengisi kedua jamnya', () => {
-    expect(document.querySelector('#f-start')).toBeNull();
+  it('mencentang "Gunakan jam" lebih dulu, lalu mengisi kedua jamnya lewat popup', () => {
+    expect(document.querySelector('#f-time-0')).toBeNull();
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
-    expect(document.querySelector<HTMLInputElement>('#f-usejam')!.checked).toBe(true);
-    expect(document.querySelector<HTMLInputElement>('#f-start')!.value).toBe('08:00');
-    expect(document.querySelector<HTMLInputElement>('#f-end')!.value).toBe('11:30');
+    expect(jamChecked()).toBe(true);
+    expect(document.querySelector<HTMLInputElement>('#f-time-0')!.value).toBe('08:00');
+    expect(document.querySelector<HTMLInputElement>('#f-time-1')!.value).toBe('11:30');
   });
 
   it('mencentang checkbox jam yang BENAR, bukan "Gunakan periode tanggal" di baris yang sama', () => {
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
-    expect(document.querySelector<HTMLInputElement>('#f-range')!.checked).toBe(false);
+    expect(document.querySelector<HTMLInputElement>('#cb-range')!.checked).toBe(false);
   });
 
   it('membiarkan "Gunakan jam" tidak tercentang saat jam tidak dicatat', () => {
     const noTime = { ...activity, startTime: '', endTime: '' };
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(noTime, plan)));
-    expect(document.querySelector<HTMLInputElement>('#f-usejam')!.checked).toBe(false);
-    expect(document.querySelector('#f-start')).toBeNull();
+    expect(jamChecked()).toBe(false);
+    expect(document.querySelector('#f-time-0')).toBeNull();
     expect(document.querySelector<HTMLTextAreaElement>('#f-keg')!.value).toBe(noTime.description);
   });
 
   it('mematikan "Gunakan periode tanggal" bila sedang tercentang — kegiatan KipLog satu hari', () => {
-    document.querySelector<HTMLInputElement>('#f-range')!.click();
+    document.querySelector<HTMLInputElement>('#cb-range')!.click();
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
-    expect(document.querySelector<HTMLInputElement>('#f-range')!.checked).toBe(false);
+    expect(document.querySelector<HTMLInputElement>('#cb-range')!.checked).toBe(false);
   });
 
   it('mengembalikan centang "Gunakan jam" saat jamnya gagal diisi', () => {
-    // Field jam di tiruan ini menolak diisi, seperti pemilih jam yang tidak
-    // dikenali. Membiarkan centangnya menyala akan meninggalkan DUA field
-    // wajib kosong — form jadi lebih buruk daripada sebelum autofill.
-    const slot = document.querySelector<HTMLDivElement>('#jam-slot')!;
-    const useJam = document.querySelector<HTMLInputElement>('#f-usejam')!;
-    useJam.addEventListener('change', () => {
-      if (!useJam.checked) return;
-      slot.innerHTML =
-        '<div class="row"><label><i>*</i> Jam Mulai:</label><input id="f-start" type="text" readonly /></div>' +
-        '<div class="row"><label><i>*</i> Jam Selesai:</label><input id="f-end" type="text" readonly /></div>';
+    // Popup jam dilumpuhkan: nilai tidak akan pernah masuk. Membiarkan
+    // centangnya menyala akan meninggalkan DUA field wajib kosong.
+    const jam = document.querySelector<HTMLInputElement>('#cb-jam')!;
+    jam.addEventListener('change', () => {
+      document.querySelector('.ant-time-picker-panel')!.innerHTML = '';
+      for (const input of Array.from(
+        document.querySelectorAll<HTMLInputElement>('.ant-time-picker-input')
+      )) {
+        const fresh = input.cloneNode(true) as HTMLInputElement;
+        input.replaceWith(fresh);
+      }
     });
 
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
 
-    const out = document.querySelector('#kiplog-out')!.textContent!;
-    expect(useJam.checked).toBe(false);
-    expect(out).toContain('dikembalikan tidak tercentang');
+    expect(jamChecked()).toBe(false);
+    expect(document.querySelector('#kiplog-out')!.textContent).toContain(
+      'dikembalikan tidak tercentang'
+    );
   });
 
   it('tidak mengaku berhasil untuk field yang nilainya tidak benar-benar masuk', () => {
-    // Tanggal di tiruan ini menolak nilai dari mana pun.
-    const date = document.querySelector<HTMLInputElement>('#f-date')!;
-    const replacement = date.cloneNode(true) as HTMLInputElement;
-    date.replaceWith(replacement);
-    replacement.addEventListener('input', () => {
-      replacement.value = '';
-    });
+    // Popup kalender dilumpuhkan: Enter tidak lagi memindahkan nilainya.
+    const trigger = document.querySelector<HTMLInputElement>('.ant-calendar-picker-input')!;
+    trigger.replaceWith(trigger.cloneNode(true));
 
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
 
     const out = document.querySelector('#kiplog-out')!.textContent!;
     expect(out).toContain('Tanggal');
-    expect(out).toContain('nilai tidak masuk');
     expect(out.split('Gagal:')[0]).not.toContain('Tanggal');
-  });
-
-  it('menemukan Tanggal lewat placeholder saat labelnya tidak terbaca', () => {
-    // Persis kegagalan yang dilaporkan pengguna: panel bilang "Tanggal (field
-    // tidak ditemukan)". Placeholder melekat pada kontrolnya sendiri, jadi
-    // jauh lebih kokoh daripada kedekatan dengan label.
-    const label = document.querySelector('#f-date')!.closest('.row')!.querySelector('label')!;
-    label.textContent = 'Tgl.';
-
-    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
-
-    expect(document.querySelector<HTMLInputElement>('#f-date')!.value).toBe('2026-08-17');
-  });
-
-  it('mencentang lewat pembungkus saat klik pada input aslinya tidak berpengaruh', () => {
-    // Komponen checkbox biasanya menyembunyikan input aslinya di balik
-    // pembungkus yang menerima klik — inilah sebab "centang tidak berubah".
-    const skp = document.querySelector<HTMLInputElement>('#f-skp')!;
-    skp.addEventListener('click', (e) => {
-      if (e.target !== skp) return;
-      e.preventDefault();
-    });
-    skp.parentElement!.addEventListener('click', (e) => {
-      if (e.target === skp) return;
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')!.set!.call(skp, true);
-    });
-
-    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
-
-    expect(skp.checked).toBe(true);
-    expect(document.querySelector('#kiplog-out')!.textContent).not.toContain(
-      'centang tidak berubah'
-    );
-  });
-
-  it('menyediakan diagnosa struktur form tanpa membocorkan isi field', () => {
-    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
-    document.querySelector<HTMLButtonElement>('#kiplog-diag')!.click();
-
-    const report = document.querySelector<HTMLTextAreaElement>('#kiplog-in')!.value;
-    expect(report).toContain('DIAGNOSA KipLog autofill');
-    expect(report).toContain('Tanggal');
-    expect(report).toContain('placeholder="Pilih tanggal"');
-    // Tidak boleh memuat isi kegiatan atau nama pegawai.
-    expect(report).not.toContain(activity.description);
-    expect(report).not.toContain('Nama Pegawai');
   });
 
   it('TIDAK menekan Save', () => {
@@ -401,25 +429,25 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     const out = document.querySelector('#kiplog-out')!.textContent!;
     expect(out).toContain('Rencana Kinerja');
     expect(out).toContain('tidak muncul di daftar');
-    expect(document.querySelector('#f-rk')!.getAttribute('data-selected')).toBeNull();
+    expect(chosenRk()).toBeNull();
+  });
+
+  it('membersihkan kotak pencarian saat opsi tidak ketemu, supaya tidak tampak terisi', () => {
+    const missing = { ...plan, name: 'RK yang tidak ada di KipApp' } as PerformancePlan;
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, missing)));
+    expect(
+      document.querySelector<HTMLInputElement>('#rk-select .ant-select-search__field')!.value
+    ).toBe('');
   });
 
   it('tidak tertipu oleh nama RK yang ada di kotak tempelnya sendiri', () => {
-    // Payload di panel KipLog memuat nama RK; kalau panel ikut dicari, skrip
-    // akan "menemukan" opsi di sana dan mengklik teks miliknya sendiri.
     const missing = { ...plan, name: 'RK yang tidak ada di KipApp' } as PerformancePlan;
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, missing)));
-    expect(document.querySelector('#f-rk')!.getAttribute('data-selected')).toBeNull();
-  });
-
-  it('membersihkan teks pencarian saat opsi tidak ketemu, supaya tidak tampak terisi', () => {
-    const missing = { ...plan, name: 'RK yang tidak ada di KipApp' } as PerformancePlan;
-    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, missing)));
-    expect(document.querySelector<HTMLInputElement>('#f-rk')!.value).toBe('');
+    expect(chosenRk()).toBeNull();
   });
 
   it('melaporkan field yang tidak ditemukan, tidak mendiamkannya', () => {
-    document.querySelector('#f-link')!.closest('.row')!.remove();
+    document.querySelector('#f-link')!.closest('.ant-row')!.remove();
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
     expect(document.querySelector('#kiplog-out')!.textContent).toContain('Data Dukung');
     expect(document.querySelector('#kiplog-out')!.textContent).toContain('Gagal');
@@ -428,7 +456,7 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
   it('menolak data yang bukan payload KipLog', () => {
     runBookmarklet('{"foo":1}');
     expect(document.querySelector('#kiplog-out')!.textContent).toContain('bukan data autofill');
-    expect(document.querySelector<HTMLInputElement>('#f-date')!.value).toBe('');
+    expect(dateValue()).toBe('');
   });
 
   it('menolak teks yang bukan JSON', () => {
@@ -436,13 +464,27 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     expect(document.querySelector('#kiplog-out')!.textContent).toContain('tidak bisa dibaca');
   });
 
-  it('mengisi field di dialog, bukan menu sidebar atau filter halaman dengan label sama', () => {
+  it('mengisi field di dialog, bukan filter halaman dengan label sama', () => {
     renderDecoyPage();
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
 
-    expect(document.querySelector<HTMLInputElement>('#f-rk')!.value).toBe(plan.name);
-    expect(document.querySelector<HTMLInputElement>('#f-date')!.value).toBe('2026-08-17');
-    expect(document.querySelector<HTMLInputElement>('#page-rk')!.value).toBe('');
-    expect(document.querySelector<HTMLInputElement>('#page-date')!.value).toBe('');
+    expect(chosenRk()).toBe(plan.name);
+    expect(dateValue()).toBe('2026-08-17');
+    // Filter halaman berlabel sama harus tetap kosong.
+    expect(document.querySelector('#page-rk .ant-select-selection-selected-value')).toBeNull();
+  });
+
+  it('menyediakan diagnosa struktur form tanpa membocorkan isi field', () => {
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    document.querySelector<HTMLButtonElement>('#kiplog-diag')!.click();
+
+    const report = document.querySelector<HTMLTextAreaElement>('#kiplog-in')!.value;
+    expect(report).toContain('DIAGNOSA KipLog autofill');
+    expect(report).toContain('dialog terdeteksi: ya');
+    expect(report).toContain('ant-calendar-picker');
+    expect(report).toContain('ant-select');
+    // Tidak boleh memuat isi kegiatan atau nama pegawai.
+    expect(report).not.toContain(activity.description);
+    expect(report).not.toContain('Nama Pegawai');
   });
 });

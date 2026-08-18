@@ -132,23 +132,26 @@ export const AUTOFILL_WAIT_INTERVAL_MS = 120;
  * Sumber skrip bookmarklet, sengaja disimpan sebagai teks yang bisa dibaca
  * ulang oleh manusia (dan oleh pengguna sebelum ia memasangnya).
  *
- * Ditulis ES5 tanpa modul karena dijalankan sebagai URL `javascript:` di
- * dalam halaman pihak lain: tidak ada bundler, tidak boleh memuat berkas dari
- * luar (CSP KipApp hampir pasti memblokirnya), dan harus utuh sendiri.
+ * DITULIS DI ATAS ANT DESIGN VUE 1.x. `outerHTML` halaman KipApp yang dikirim
+ * pemilik proyek memastikan kerangkanya: `ant-select`, `ant-row`/`ant-col`,
+ * `ant-checkbox-wrapper`, `ant-table`, dan seterusnya. Sebelum ini pencocokan
+ * bersandar pada teks label dan kedekatan DOM — tebakan yang gagal berkali-kali
+ * di form sungguhan. Nama class kerangka itu jauh lebih pasti, jadi dipakai
+ * sebagai jalan utama; penelusuran lewat teks label tetap disimpan sebagai
+ * cadangan kalau suatu saat kerangkanya berganti.
  *
- * TIGA PRINSIP yang lahir dari kegagalan percobaan nyata pengguna:
+ * SEBAB KEGAGALAN TANGGAL AKHIRNYA JELAS: pemilih tanggal dan jam Ant Design
+ * memakai input **readonly** sebagai pemicunya — nilai hanya boleh masuk lewat
+ * popup. Kode sebelumnya membuang setiap kontrol readonly, baik saat menelusuri
+ * label maupun placeholder, sehingga field itu memang tidak akan pernah
+ * ditemukan. Sekarang input readonly diterima sebagai PEMICU, dan nilainya
+ * ditulis ke input di dalam popup yang terbuka (`ant-calendar-input` /
+ * `ant-time-picker-panel-input`).
  *
- * 1. **Menunggu, bukan menebak waktu.** Rencana Kinerja dan Tanggal baru
- *    memunculkan isinya setelah diklik, dan kapan tepatnya tidak bisa
- *    dipastikan. Skrip menunggu keadaan yang dituju sampai muncul (dengan
- *    batas), bukan berharap satu jeda tetap sudah cukup.
- * 2. **Memeriksa, bukan mengaku.** Setiap field diperiksa ulang setelah diisi.
- *    Versi sebelumnya melaporkan "Terisi" begitu ia selesai mengklik, sehingga
- *    pengguna diberi tahu berhasil padahal Rencana Kinerja dan Tanggal masih
- *    kosong — kesalahan yang lebih buruk daripada gagalnya sendiri.
- * 3. **Tidak meninggalkan form lebih buruk daripada saat ditemukan.**
- *    Mencentang "Gunakan jam" memunculkan dua field WAJIB baru; kalau jamnya
- *    ternyata gagal diisi, centang itu dikembalikan seperti semula.
+ * Tiga prinsip dari percobaan-percobaan sebelumnya tetap berlaku: menunggu
+ * keadaan yang dituju alih-alih menebak durasi, memeriksa hasil alih-alih
+ * mengaku berhasil, dan tidak meninggalkan form lebih buruk daripada saat
+ * ditemukan.
  */
 export const AUTOFILL_SCRIPT = `(function () {
   var HOSTS = ${JSON.stringify(KIPAPP_HOSTS)};
@@ -164,14 +167,36 @@ export const AUTOFILL_SCRIPT = `(function () {
   var OLD = document.getElementById(PANEL_ID);
   if (OLD) OLD.remove();
 
-  var SIMPLE_LABELS = [
-    ['kegiatan', 'Kegiatan'],
-    ['progres', 'Progres'],
-    ['capaian', 'Capaian'],
-    ['dataDukung', 'Data Dukung'],
-    ['masukanKeCapaianSkp', 'Masukan ke capaian SKP']
-  ];
-  var CONTROLS = 'input:not([type=hidden]), textarea, select';
+  // Kerangka Ant Design Vue 1.x, dipastikan dari outerHTML halaman KipApp.
+  var ANT = {
+    modal: '.ant-modal-content',
+    title: '.ant-modal-title',
+    row: '.ant-row',
+    select: '.ant-select',
+    selectTrigger: '.ant-select-selection',
+    selectSearch: 'input.ant-select-search__field',
+    selectChosen: '.ant-select-selection-selected-value',
+    dropdownItem: '.ant-select-dropdown-menu-item',
+    dateTrigger: 'input.ant-calendar-picker-input',
+    dateInner: 'input.ant-calendar-input',
+    timeTrigger: 'input.ant-time-picker-input',
+    timeInner: 'input.ant-time-picker-panel-input',
+    checkbox: 'input.ant-checkbox-input',
+    checkboxWrapper: '.ant-checkbox-wrapper',
+    text: 'textarea, input.ant-input, input.ant-input-number-input'
+  };
+
+  var LABELS = {
+    rencanaKinerja: 'Rencana Kinerja',
+    tanggal: 'Tanggal',
+    jamMulai: 'Jam Mulai',
+    jamSelesai: 'Jam Selesai',
+    kegiatan: 'Kegiatan',
+    progres: 'Progres',
+    capaian: 'Capaian',
+    dataDukung: 'Data Dukung',
+    masukanKeCapaianSkp: 'Masukan ke capaian SKP'
+  };
 
   function norm(s) {
     return (s || '').replace(/\\s+/g, ' ').replace(/[*:]/g, '').trim().toLowerCase();
@@ -181,143 +206,74 @@ export const AUTOFILL_SCRIPT = `(function () {
     return Array.prototype.slice.call((root || document).querySelectorAll(selector));
   }
 
-  function size(el) {
-    return el.getElementsByTagName('*').length;
-  }
-
   function visible(el) {
     return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
   }
 
-  /**
-   * Panel KipLog sendiri selalu dikecualikan: kotak tempel di dalamnya MEMUAT
-   * nama RK yang sedang dicari, jadi tanpa ini skrip bisa "menemukan" opsi RK
-   * di dalam kotaknya sendiri.
-   */
   function inPanel(el) {
     var panel = document.getElementById(PANEL_ID);
     return !!(panel && panel.contains(el));
   }
 
-  function dialogScope() {
-    var TITLE = 'add capaian kegiatan perhari';
+  function size(el) {
+    return el.getElementsByTagName('*').length;
+  }
+
+  /**
+   * Dialognya, bukan halaman di belakangnya.
+   *
+   * Halaman Pelaksanaan punya filter "Rencana Kinerja" dan kolom tabel
+   * "Tanggal" dengan teks yang sama persis, jadi tanpa pembatasan ini autofill
+   * bisa mengisi filter halaman alih-alih formnya.
+   */
+  function findModal() {
+    var modals = list(ANT.modal).filter(function (el) {
+      return !inPanel(el) && visible(el);
+    });
+    for (var i = modals.length - 1; i >= 0; i--) {
+      if (norm(modals[i].textContent).indexOf('add capaian kegiatan perhari') !== -1) return modals[i];
+    }
+    return modals.length ? modals[modals.length - 1] : null;
+  }
+
+  var MODAL = findModal();
+  var SCOPE = MODAL || document.body;
+
+  /**
+   * Baris field milik sebuah label.
+   *
+   * Ant Design menaruh label dan kontrolnya di dua kolom bersaudara di dalam
+   * satu \`ant-row\`, jadi barisnya adalah wadah yang tepat — bukan hasil
+   * perambatan naik sampai ketemu kontrol apa pun, yang dulu bisa mengambil
+   * kontrol milik field lain.
+   */
+  function rowFor(labelText) {
+    var wanted = norm(labelText);
     var best = null;
     var bestSize = Infinity;
-    var nodes = list('div, section, form');
+    var nodes = list('div, span, label, td, p, strong, b', SCOPE);
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
-      if (inPanel(el)) continue;
-      if (norm(el.textContent).indexOf(TITLE) === -1) continue;
-      if (!el.querySelector(CONTROLS)) continue;
+      if (inPanel(el) || norm(el.textContent) !== wanted) continue;
       var s = size(el);
       if (s < bestSize) { best = el; bestSize = s; }
     }
-    return best || document.body;
-  }
+    if (!best) return null;
 
-  var SCOPE = dialogScope();
-
-  function flatIndex(el) {
-    var all = document.getElementsByTagName('*');
-    for (var i = 0; i < all.length; i++) if (all[i] === el) return i;
-    return -1;
-  }
-
-  /**
-   * Seluruh label yang dikenal skrip ini. Dipakai untuk mengetahui kapan
-   * pencarian sudah keluar dari baris milik satu label.
-   */
-  var KNOWN_LABELS = [
-    'Rencana Kinerja', 'Tanggal', 'Jam Mulai', 'Jam Selesai', 'Kegiatan',
-    'Progres', 'Capaian', 'Data Dukung', 'Masukan ke capaian SKP',
-    'Gunakan jam', 'Gunakan periode tanggal', 'Pegawai', 'Tahun', 'SKP'
-  ];
-
-  function isKnownLabel(text) {
-    for (var k = 0; k < KNOWN_LABELS.length; k++) {
-      if (norm(KNOWN_LABELS[k]) === text) return true;
-    }
-    return false;
-  }
-
-  /** Peta posisi seluruh elemen, dibangun sekali per pencarian. */
-  function positionMap() {
-    var all = document.getElementsByTagName('*');
-    var map = [];
-    for (var i = 0; i < all.length; i++) map.push(all[i]);
-    return map;
-  }
-
-  /**
-   * Apakah ada label lain DI ANTARA label kita dan kontrol yang dipilih.
-   *
-   * Kalau ada, kontrol itu milik label lain, bukan milik kita. Aturan ini
-   * dipilih karena bisa dinalar langsung dari tata letak: sebuah field selalu
-   * berdampingan dengan labelnya, dan tidak pernah ada label lain menyelip di
-   * antaranya. Pembanding berbasis jarak sempat dicoba dan ternyata rapuh.
-   */
-  function labelBetween(map, ownLabel, ctl) {
-    var a = map.indexOf(ownLabel);
-    var b = map.indexOf(ctl);
-    var lo = Math.min(a, b);
-    var hi = Math.max(a, b);
-    for (var i = lo + 1; i < hi; i++) {
-      var el = map[i];
-      if (el === ownLabel || inPanel(el)) continue;
-      if (el.contains(ownLabel) || el.contains(ctl)) continue;
-      if (isKnownLabel(norm(el.textContent))) return true;
-    }
-    return false;
-  }
-
-  /**
-   * Kontrol harus benar-benar milik labelnya.
-   *
-   * Tanpa penjagaan ini pencarian merambat naik sampai menemukan kontrol apa
-   * pun, dan ketika sebuah field memang tidak ada — misalnya pemilih jam yang
-   * tidak dikenali — nilainya tertulis diam-diam ke field lain yang tidak ada
-   * hubungannya. Melaporkan "tidak ditemukan" jauh lebih baik daripada mengisi
-   * tempat yang salah.
-   */
-  var MAX_CONTROL_DISTANCE = 40;
-
-  function controlNear(el, selector) {
-    var map = positionMap();
-    var anchor = map.indexOf(el);
-    var scope = el;
+    var scope = best;
     for (var up = 0; up < 5 && scope; up++) {
-      var found = list(selector || CONTROLS, scope);
-      var best = null;
-      var bestDistance = Infinity;
-      for (var i = 0; i < found.length; i++) {
-        var c = found[i];
-        if (c.disabled || c.readOnly || inPanel(c)) continue;
-        var d = Math.abs(map.indexOf(c) - anchor);
-        if (d < bestDistance) { best = c; bestDistance = d; }
-      }
-      if (best) {
-        if (bestDistance > MAX_CONTROL_DISTANCE) return null;
-        if (labelBetween(map, el, best)) return null;
-        return best;
-      }
+      if (scope.classList && scope.classList.contains('ant-row')) return scope;
       scope = scope.parentElement;
     }
-    return null;
+    return best.parentElement;
   }
 
-  function findControl(labelText, selector) {
-    var wanted = norm(labelText);
-    var nodes = list('label, span, div, td, p, strong, b', SCOPE);
-    var best = null;
-    var bestSize = Infinity;
-    for (var i = 0; i < nodes.length; i++) {
-      var el = nodes[i];
-      if (inPanel(el)) continue;
-      if (norm(el.textContent) !== wanted) continue;
-      var s = size(el);
-      if (s < bestSize) { best = el; bestSize = s; }
-    }
-    return best ? controlNear(best, selector) : null;
+  function pick(row, selector) {
+    if (!row) return null;
+    var found = list(selector, row).filter(function (el) {
+      return !inPanel(el) && !el.disabled;
+    });
+    return found[0] || null;
   }
 
   function setNative(ctl, value) {
@@ -334,125 +290,18 @@ export const AUTOFILL_SCRIPT = `(function () {
     el.dispatchEvent(new KeyboardEvent('keyup', { key: key, bubbles: true }));
   }
 
-  /** Klik yang meniru tekan-lepas, karena banyak komponen membuka diri pada mousedown. */
   function tap(el) {
     el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     el.click();
   }
 
-  function snapshotInputs() {
-    return list('input:not([type=hidden]), textarea').filter(function (el) {
-      return !inPanel(el) && visible(el);
-    });
-  }
-
-  /** Input yang BARU terlihat sesudah sesuatu diklik — isi popup yang baru terbuka. */
-  function newInputs(before) {
-    var now = list('input:not([type=hidden]), textarea');
-    var fresh = [];
-    for (var i = 0; i < now.length; i++) {
-      var el = now[i];
-      if (inPanel(el) || el.disabled || el.readOnly) continue;
-      if (!visible(el)) continue;
-      if (before.indexOf(el) !== -1) continue;
-      fresh.push(el);
-    }
-    return fresh;
-  }
-
-  /** Calon opsi dropdown: elemen mana pun yang teksnya persis sama. */
-  function findOption(text) {
-    var wanted = norm(text);
-    var nodes = list('li, div, span, p, a, td, option, label');
-    var best = null;
-    var bestSize = Infinity;
-    for (var i = 0; i < nodes.length; i++) {
-      var el = nodes[i];
-      if (inPanel(el) || !visible(el)) continue;
-      if (norm(el.textContent) !== wanted) continue;
-      var s = size(el);
-      if (s < bestSize) { best = el; bestSize = s; }
-    }
-    return best;
-  }
-
-  /**
-   * Menunggu sebuah keadaan tercapai, bukan menebak berapa lama popup butuh
-   * waktu. \`test\` mengembalikan nilai apa pun yang tidak kosong bila sudah.
-   */
   function waitFor(test, done, tries) {
     if (tries === undefined) tries = TRIES;
     var result = null;
     try { result = test(); } catch (e) { result = null; }
     if (result || tries <= 0) { done(result); return; }
     setTimeout(function () { waitFor(test, done, tries - 1); }, INTERVAL);
-  }
-
-  /**
-   * Apakah nilai benar-benar TERCATAT di kontrolnya — bukan sekadar terketik.
-   * Combobox menaruh pilihannya sebagai teks di sekitar kontrol, bukan selalu
-   * di \`value\`, jadi keduanya diperiksa.
-   */
-  function holdsValue(ctl, value) {
-    var wanted = norm(value);
-    if (norm(ctl.value) === wanted) return true;
-    var scope = ctl;
-    for (var up = 0; up < 3 && scope; up++) {
-      if (norm(scope.textContent).indexOf(wanted) !== -1) return true;
-      scope = scope.parentElement;
-    }
-    return false;
-  }
-
-  /**
-   * Mencari kontrol lewat teks placeholder-nya.
-   *
-   * Penanda ini lebih kokoh daripada kedekatan dengan label karena melekat
-   * pada kontrolnya sendiri dan terlihat langsung di layar ("Pilih tanggal",
-   * "Pilih jam", "Pilih rencana kinerja SKP"). Dipakai sebagai cadangan ketika
-   * penelusuran lewat label gagal — yang persis terjadi pada field Tanggal.
-   */
-  function byPlaceholder(text, index) {
-    var wanted = norm(text);
-    var found = list('input, textarea').filter(function (el) {
-      if (inPanel(el) || el.disabled || el.readOnly || !visible(el)) return false;
-      return norm(el.getAttribute('placeholder')) === wanted;
-    });
-    return found[index || 0] || null;
-  }
-
-  /** Kontrol sebuah field: lewat label dulu, lalu placeholder sebagai cadangan. */
-  function locate(label, placeholder, index) {
-    return findControl(label) || (placeholder ? byPlaceholder(placeholder, index) : null);
-  }
-
-  /**
-   * Mengubah centang, lalu MEMASTIKANNYA berubah.
-   *
-   * Komponen checkbox biasanya menyembunyikan input aslinya di balik pembungkus
-   * yang menerima klik, sehingga mengklik input tersembunyi itu bisa tidak
-   * berpengaruh sama sekali — inilah yang membuat "Masukan ke capaian SKP"
-   * gagal. Dicoba berlapis: input, pembungkusnya, induknya, lalu terakhir
-   * menyetel nilainya langsung beserta event-nya.
-   */
-  function toggleCheckbox(ctl, wanted) {
-    if (ctl.checked === wanted) return true;
-    ctl.click();
-    if (ctl.checked === wanted) return true;
-
-    var wrapper = ctl.parentElement;
-    for (var up = 0; up < 2 && wrapper; up++) {
-      tap(wrapper);
-      if (ctl.checked === wanted) return true;
-      wrapper = wrapper.parentElement;
-    }
-
-    var desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
-    if (desc && desc.set) desc.set.call(ctl, wanted);
-    ctl.dispatchEvent(new Event('input', { bubbles: true }));
-    ctl.dispatchEvent(new Event('change', { bubbles: true }));
-    return ctl.checked === wanted;
   }
 
   function mark(el) {
@@ -476,6 +325,44 @@ export const AUTOFILL_SCRIPT = `(function () {
     next();
   }
 
+  /** Checkbox pengalih ("Gunakan jam") dicari lewat pembungkusnya. */
+  function toggleByText(labelText) {
+    var wanted = norm(labelText);
+    var wrappers = list(ANT.checkboxWrapper, SCOPE);
+    for (var i = 0; i < wrappers.length; i++) {
+      if (inPanel(wrappers[i])) continue;
+      if (norm(wrappers[i].textContent) !== wanted) continue;
+      return wrappers[i].querySelector(ANT.checkbox);
+    }
+    var row = rowFor(labelText);
+    return pick(row, ANT.checkbox);
+  }
+
+  /**
+   * Mengubah centang lalu memastikannya berubah. Input aslinya tersembunyi di
+   * balik \`ant-checkbox-inner\`, jadi bila klik pada input tidak berpengaruh,
+   * lapisan itu yang diklik.
+   */
+  function setChecked(cb, wanted) {
+    if (!cb) return false;
+    if (cb.checked === wanted) return true;
+    cb.click();
+    if (cb.checked === wanted) return true;
+
+    var box = cb.parentElement;
+    if (box) {
+      var inner = box.querySelector('.ant-checkbox-inner');
+      if (inner) { tap(inner); if (cb.checked === wanted) return true; }
+      tap(box);
+      if (cb.checked === wanted) return true;
+    }
+
+    var desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+    if (desc && desc.set) desc.set.call(cb, wanted);
+    cb.dispatchEvent(new Event('change', { bubbles: true }));
+    return cb.checked === wanted;
+  }
+
   function apply(data, report) {
     var done = [];
     var failed = [];
@@ -487,98 +374,98 @@ export const AUTOFILL_SCRIPT = `(function () {
     function ok(label, el) { done.push(label); mark(el); }
     function filled(label) { return done.indexOf(label) !== -1; }
 
+    if (!MODAL) {
+      notes.push('dialog "Add Capaian Kegiatan Perhari" tidak terdeteksi; pastikan form Add sudah terbuka');
+    }
+
     // 1. Pengalih tampilan: field jam belum ada di halaman sebelum dicentang.
     steps.push(function (next) {
-      var range = findControl('Gunakan periode tanggal', 'input[type=checkbox]');
-      if (range) toggleCheckbox(range, false);
-
-      jamCheckbox = findControl('Gunakan jam', 'input[type=checkbox]');
+      setChecked(toggleByText('Gunakan periode tanggal'), false);
+      jamCheckbox = toggleByText('Gunakan jam');
       if (!jamCheckbox) {
         if (wantJam) notes.push('checkbox "Gunakan jam" tidak ditemukan');
       } else {
-        toggleCheckbox(jamCheckbox, wantJam);
+        setChecked(jamCheckbox, wantJam);
       }
       next();
     });
 
-    // 2. Field biasa — ditulis langsung, lalu dibaca ulang untuk memastikan.
+    // 2. Field teks biasa.
     steps.push(function (next) {
-      for (var i = 0; i < SIMPLE_LABELS.length; i++) {
-        var key = SIMPLE_LABELS[i][0];
-        var label = SIMPLE_LABELS[i][1];
+      var plain = ['kegiatan', 'progres', 'capaian', 'dataDukung'];
+      for (var i = 0; i < plain.length; i++) {
+        var key = plain[i];
+        var label = LABELS[key];
         var value = data[key];
         if (value === null || value === undefined || value === '') continue;
-        var ctl = findControl(label);
+        var row = rowFor(label);
+        var ctl = pick(row, ANT.text);
         if (!ctl) { failed.push(label + ' (field tidak ditemukan)'); continue; }
-        if (ctl.type === 'checkbox') {
-          if (toggleCheckbox(ctl, !!value)) ok(label, ctl);
-          else failed.push(label + ' (centang tidak berubah walau sudah dicoba lewat pembungkusnya)');
-        } else {
-          setNative(ctl, String(value));
-          if (norm(ctl.value) === norm(String(value))) ok(label, ctl);
-          else failed.push(label + ' (nilai tidak tersimpan di field)');
-        }
+        setNative(ctl, String(value));
+        if (norm(ctl.value) === norm(String(value))) ok(label, ctl);
+        else failed.push(label + ' (nilai tidak tersimpan di field)');
       }
+      next();
+    });
+
+    // 3. Checkbox "Masukan ke capaian SKP".
+    steps.push(function (next) {
+      var label = LABELS.masukanKeCapaianSkp;
+      var cb = toggleByText(label);
+      if (!cb) { failed.push(label + ' (checkbox tidak ditemukan)'); next(); return; }
+      if (setChecked(cb, !!data.masukanKeCapaianSkp)) ok(label, cb);
+      else failed.push(label + ' (centang tidak berubah)');
       next();
     });
 
     /**
-     * Combobox: klik untuk membuka, ketik untuk menyaring, TUNGGU opsinya
-     * muncul, klik opsinya, lalu PASTIKAN pilihannya benar-benar tercatat.
-     * Mengetik saja tidak memilih apa pun — inilah yang membuat percobaan
-     * pengguna berhenti dengan teks tertulis tapi tidak terpilih.
+     * Combobox Ant Design: klik pemicunya, ketik di kotak pencarian yang
+     * tersembunyi di dalamnya, TUNGGU daftar opsinya (dipasang di \`body\`,
+     * bukan di dalam dialog), lalu KLIK opsinya. Mengetik saja tidak memilih.
      */
-    function comboboxSteps(label, value, placeholder) {
-      var ctl = null;
-      var search = null;
-      var before = null;
+    function comboboxSteps(label, value) {
+      var select = null;
 
       steps.push(function (next) {
-        ctl = locate(label, placeholder);
-        if (!ctl) { failed.push(label + ' (field tidak ditemukan)'); next(); return; }
-        before = snapshotInputs();
-        tap(ctl);
-        ctl.focus();
+        var row = rowFor(label);
+        select = pick(row, ANT.select);
+        if (!select) { failed.push(label + ' (combobox tidak ditemukan)'); next(); return; }
+        tap(select.querySelector(ANT.selectTrigger) || select);
         next();
       });
 
       steps.push(function (next) {
-        if (!ctl) { next(); return; }
-        var fresh = newInputs(before);
-        search = fresh.length ? fresh[0] : ctl;
+        if (!select) { next(); return; }
+        var search = select.querySelector(ANT.selectSearch);
+        if (!search) { failed.push(label + ' (kotak pencarian combobox tidak ditemukan)'); next(); return; }
+        search.focus();
         setNative(search, value);
         next();
       });
 
-      // Teks pencarian tidak boleh ditinggalkan saat gagal: kotaknya akan
-      // tampak terisi padahal tidak ada yang terpilih, dan itu lebih
-      // menyesatkan daripada kotak kosong.
-      function clearSearch() {
-        if (!search) return;
-        setNative(search, '');
-        press(search, 'Escape');
-      }
-
       steps.push(function (next) {
-        if (!ctl) { next(); return; }
-        waitFor(function () { return findOption(value); }, function (option) {
-          // Tanpa opsi yang benar-benar diklik, pemeriksaan nilai TIDAK boleh
-          // dipercaya: teks yang barusan diketik sudah membuat kotaknya
-          // "berisi" nilai yang dicari, sehingga apa pun akan tampak berhasil.
+        if (!select) { next(); return; }
+        var wanted = norm(value);
+        waitFor(function () {
+          var items = list(ANT.dropdownItem).filter(function (el) {
+            return !inPanel(el) && visible(el) && norm(el.textContent) === wanted;
+          });
+          return items[0] || null;
+        }, function (option) {
           if (!option) {
-            clearSearch();
+            var search = select.querySelector(ANT.selectSearch);
+            if (search) { setNative(search, ''); press(search, 'Escape'); }
             failed.push(label + ' (pilihan tidak muncul di daftar setelah dicari)');
             next();
             return;
           }
           tap(option);
-          waitFor(function () { return holdsValue(ctl, value) ? 'ya' : null; }, function (recorded) {
-            if (recorded) {
-              ok(label, ctl);
-            } else {
-              clearSearch();
-              failed.push(label + ' (opsi diklik tapi tidak tercatat terpilih)');
-            }
+          waitFor(function () {
+            var chosen = select.querySelector(ANT.selectChosen);
+            return chosen && norm(chosen.textContent) === wanted ? 'ya' : null;
+          }, function (recorded) {
+            if (recorded) ok(label, select);
+            else failed.push(label + ' (opsi diklik tapi tidak tercatat terpilih)');
             next();
           }, 8);
         });
@@ -586,65 +473,67 @@ export const AUTOFILL_SCRIPT = `(function () {
     }
 
     /**
-     * Pemilih tanggal/jam: klik untuk membuka, lalu coba tulis ke fieldnya
-     * sendiri; kalau nilainya tidak tercatat, coba kotak isian yang muncul di
-     * dalam popup. Diperiksa setelah tiap percobaan, bukan diasumsikan.
+     * Pemilih tanggal/jam Ant Design. Input pemicunya READONLY — nilai hanya
+     * bisa masuk lewat kotak isian di dalam popup yang terbuka setelah diklik.
+     * Inilah sebab field Tanggal selalu dilaporkan "tidak ditemukan": kontrol
+     * readonly dilewati sebelum sempat dicoba.
      */
-    function pickerSteps(label, value, placeholder, index) {
-      var ctl = null;
-      var before = null;
+    function pickerSteps(label, value, triggerSelector, innerSelector) {
+      var trigger = null;
 
       steps.push(function (next) {
-        ctl = locate(label, placeholder, index);
-        if (!ctl) { failed.push(label + ' (field tidak ditemukan)'); next(); return; }
-        before = snapshotInputs();
-        tap(ctl);
-        ctl.focus();
+        var row = rowFor(label);
+        trigger = pick(row, triggerSelector) || pick(row, 'input');
+        if (!trigger) { failed.push(label + ' (pemilih tidak ditemukan)'); next(); return; }
+        tap(trigger);
+        trigger.focus();
         next();
       });
 
       steps.push(function (next) {
-        if (!ctl) { next(); return; }
-
-        function attempt(target) {
+        if (!trigger) { next(); return; }
+        waitFor(function () {
+          var inner = list(innerSelector).filter(function (el) {
+            return !inPanel(el) && visible(el) && !el.disabled;
+          });
+          return inner[0] || null;
+        }, function (inner) {
+          // Menulis ke pemicu yang readonly tidak ada gunanya: nilainya masuk
+          // ke DOM tapi tidak ke state komponennya, sehingga Save tetap
+          // mengirim kosong — dan pemeriksaan nilai akan tertipu mengira
+          // berhasil. Kalau popup tidak terbuka, itu kegagalan, bukan jalan
+          // cadangan.
+          var target = inner || (trigger.readOnly ? null : trigger);
+          if (!target) {
+            failed.push(label + ' (popup pemilih tidak terbuka)');
+            next();
+            return;
+          }
           setNative(target, value);
           press(target, 'Enter');
-        }
-
-        attempt(ctl);
-        waitFor(function () { return holdsValue(ctl, value) ? 'ya' : null; }, function (first) {
-          if (first) { ok(label, ctl); next(); return; }
-
-          var fresh = newInputs(before);
-          for (var i = 0; i < fresh.length; i++) attempt(fresh[i]);
-
-          waitFor(function () { return holdsValue(ctl, value) ? 'ya' : null; }, function (second) {
-            if (second) ok(label, ctl);
-            else failed.push(label + ' (nilai tidak masuk, sudah dicoba di field dan di popup)');
+          waitFor(function () {
+            return norm(trigger.value) === norm(value) ? 'ya' : null;
+          }, function (recorded) {
+            if (recorded) ok(label, trigger);
+            else failed.push(label + ' (nilai ditolak kotak isian di dalam popup)');
             next();
           }, 8);
-        }, 8);
+        });
       });
     }
 
-    if (data.rencanaKinerja) {
-      comboboxSteps('Rencana Kinerja', data.rencanaKinerja, 'Pilih rencana kinerja SKP');
-    }
-    if (data.tanggal) pickerSteps('Tanggal', data.tanggal, 'Pilih tanggal');
+    if (data.rencanaKinerja) comboboxSteps(LABELS.rencanaKinerja, data.rencanaKinerja);
+    if (data.tanggal) pickerSteps(LABELS.tanggal, data.tanggal, ANT.dateTrigger, ANT.dateInner);
     if (wantJam) {
-      // Kedua field jam memakai placeholder yang sama, jadi dibedakan urutannya.
-      pickerSteps('Jam Mulai', data.jamMulai, 'Pilih jam', 0);
-      pickerSteps('Jam Selesai', data.jamSelesai, 'Pilih jam', 1);
+      pickerSteps(LABELS.jamMulai, data.jamMulai, ANT.timeTrigger, ANT.timeInner);
+      pickerSteps(LABELS.jamSelesai, data.jamSelesai, ANT.timeTrigger, ANT.timeInner);
     }
 
-    /**
-     * Jangan tinggalkan form lebih buruk daripada saat ditemukan: centang
-     * "Gunakan jam" memunculkan DUA field wajib baru, jadi kalau jamnya gagal
-     * diisi, centang itu dikembalikan.
-     */
+    // Jangan tinggalkan form lebih buruk: centang "Gunakan jam" memunculkan dua
+    // field WAJIB baru, jadi kalau jamnya gagal diisi, centangnya dikembalikan.
     steps.push(function (next) {
-      if (wantJam && jamCheckbox && jamCheckbox.checked && !(filled('Jam Mulai') && filled('Jam Selesai'))) {
-        jamCheckbox.click();
+      if (wantJam && jamCheckbox && jamCheckbox.checked && !(filled(LABELS.jamMulai) && filled(LABELS.jamSelesai))) {
+        setChecked(jamCheckbox, false);
         notes.push('"Gunakan jam" dikembalikan tidak tercentang karena jamnya gagal diisi; kalau dibiarkan, KipApp menuntut dua field wajib yang kosong');
       }
       next();
@@ -677,37 +566,31 @@ export const AUTOFILL_SCRIPT = `(function () {
 
   /**
    * Laporan struktur form, untuk dikirim balik saat ada yang masih gagal.
-   *
-   * Hanya bentuk kontrolnya: tag, jenis, placeholder, dan potongan class —
-   * tidak ada isi field, tidak ada nama, tidak ada data kegiatan. Ini yang
-   * mengubah putaran perbaikan berikutnya dari menebak menjadi berdasar bukti.
+   * Hanya bentuk kontrolnya — tidak ada isi field, nama, atau data kegiatan.
    */
   function diagnose() {
     var lines = ['DIAGNOSA KipLog autofill', 'host: ' + location.hostname];
-    lines.push('dialog ditemukan: ' + (SCOPE !== document.body ? 'ya' : 'TIDAK (jatuh ke seluruh halaman)'));
-    for (var i = 0; i < KNOWN_LABELS.length; i++) {
-      var label = KNOWN_LABELS[i];
-      var ctl = findControl(label);
-      if (!ctl) { lines.push('- ' + label + ': label/kontrol TIDAK ditemukan'); continue; }
-      lines.push('- ' + label + ': ' + ctl.tagName.toLowerCase() +
-        (ctl.type ? '[' + ctl.type + ']' : '') +
-        ' placeholder="' + (ctl.getAttribute('placeholder') || '') + '"' +
-        ' class="' + String(ctl.className || '').slice(0, 60) + '"');
+    lines.push('dialog terdeteksi: ' + (MODAL ? 'ya' : 'TIDAK'));
+    for (var key in LABELS) {
+      if (!Object.prototype.hasOwnProperty.call(LABELS, key)) continue;
+      var label = LABELS[key];
+      var row = rowFor(label);
+      if (!row) { lines.push('- ' + label + ': baris TIDAK ditemukan'); continue; }
+      var kinds = [];
+      if (pick(row, ANT.select)) kinds.push('ant-select');
+      if (pick(row, ANT.dateTrigger)) kinds.push('ant-calendar-picker');
+      if (pick(row, ANT.timeTrigger)) kinds.push('ant-time-picker');
+      if (pick(row, ANT.checkbox)) kinds.push('ant-checkbox');
+      if (pick(row, ANT.text)) kinds.push('teks');
+      var any = list('input, textarea', row).filter(function (el) { return !inPanel(el); });
+      var shapes = any.map(function (el) {
+        return el.tagName.toLowerCase() + (el.type ? '[' + el.type + ']' : '') +
+          (el.readOnly ? ' readonly' : '') + (el.disabled ? ' disabled' : '') +
+          ' class="' + String(el.className || '').slice(0, 70) + '"';
+      });
+      lines.push('- ' + label + ': ' + (kinds.length ? kinds.join('+') : 'jenis tidak dikenali'));
+      for (var s = 0; s < shapes.length; s++) lines.push('    ' + shapes[s]);
     }
-    lines.push('input terlihat di dialog:');
-    var inputs = list('input, textarea', SCOPE);
-    for (var k = 0; k < inputs.length; k++) {
-      var el = inputs[k];
-      if (inPanel(el)) continue;
-      lines.push('  * ' + el.tagName.toLowerCase() +
-        (el.type ? '[' + el.type + ']' : '') +
-        ' placeholder="' + (el.getAttribute('placeholder') || '') + '"' +
-        (el.readOnly ? ' readonly' : '') + (el.disabled ? ' disabled' : '') +
-        ' class="' + String(el.className || '').slice(0, 60) + '"');
-    }
-    // Karakter baris baru dibangun saat jalan, bukan lewat escape: escape di
-    // dalam template literal ini dinormalkan alat format sehingga menyisipkan
-    // baris baru sungguhan ke tengah string dan merusak skripnya.
     return lines.join(String.fromCharCode(10));
   }
 
@@ -717,6 +600,7 @@ export const AUTOFILL_SCRIPT = `(function () {
     box.focus();
     box.select();
   };
+
   panel.querySelector('#kiplog-go').onclick = function () {
     var raw = panel.querySelector('#kiplog-in').value;
     var data;
