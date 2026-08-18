@@ -50,7 +50,7 @@ penyimpan sinkronisasi (lihat "Login & Sinkronisasi"). Detail lengkap di
 - **Kegiatan**: form kegiatan harian dengan field persis urutan KipApp, RK combobox dengan fuzzy search, rekomendasi RK otomatis, generator draf capaian.
 - **Bukti Dukung**: unggah/kompresi gambar, tautan eksternal, galeri per kegiatan, Evidence Inbox untuk bukti yang belum ditautkan.
 - **Kalender & Dashboard**: tampilan bulan/minggu/hari (agenda list di mobile), ringkasan capaian SKP, alert & nudge.
-- **Laporan**: PDF "Data Dukung Laporan Kegiatan", Excel, CSV/JSON, Evidence Pack ZIP.
+- **Laporan**: PDF "Data Dukung Laporan Kegiatan" gabungan, **ZIP berisi satu PDF per kegiatan** dengan pola nama yang bisa disunting, Excel, CSV/JSON, Evidence Pack ZIP.
 - **KipApp Ready**: mode salin dua kolom untuk memindahkan data ke KipApp, dengan penguncian periode, plus bookmarklet autofill (lihat di bawah).
 - **Backup & Import**: backup JSON/ZIP, restore (gabung/ganti), hapus semua data, dan rekonsiliasi Excel Pelaksanaan dari KipApp (lihat kolom mana yang sudah/belum tercatat di KipLog).
 - **Rencana Kinerja & Template**: 40 RK 2026 (seed), template kegiatan yang bisa dipakai ulang.

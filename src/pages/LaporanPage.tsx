@@ -8,19 +8,35 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { MonthPicker } from '@/components/common/MonthPicker';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
 import { useActivities } from '@/hooks/useActivities';
 import { usePerformancePlans } from '@/hooks/usePerformancePlans';
 import { useAllEvidence } from '@/hooks/useAllEvidence';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { formatDateString, formatIndonesianDate, todayString } from '@/lib/date/date-utils';
-import { buildReportPeriod, REPORT_PERIOD_LABELS, type ReportPeriodKind } from '@/lib/reporting/report-period';
+import {
+  buildReportPeriod,
+  REPORT_PERIOD_LABELS,
+  type ReportPeriodKind,
+} from '@/lib/reporting/report-period';
 import { buildReportFilename, periodToFilenameSegment } from '@/lib/reporting/filename';
 import { generateDataDukungPdf } from '@/lib/reporting/pdf-data-dukung';
 import { generateActivityExcel } from '@/lib/reporting/excel-export';
 import { generateActivityCsv } from '@/lib/reporting/csv-export';
 import { generateActivityJson } from '@/lib/reporting/json-export';
 import { generateEvidencePack } from '@/lib/reporting/evidence-pack';
+import {
+  DEFAULT_PDF_NAME_PATTERN,
+  generatePerActivityPdfZip,
+  PDF_NAME_TOKENS,
+  renderPdfName,
+} from '@/lib/reporting/per-activity-pdf-zip';
 import { buildActivityReportRows } from '@/lib/reporting/activity-rows';
 import { groupEvidenceByActivity } from '@/lib/services/evidence-grouping';
 import { downloadBlob } from '@/lib/utils/download-blob';
@@ -62,11 +78,16 @@ export function LaporanPage() {
     [activities, period]
   );
 
-  const selected = useMemo(() => inRange.filter((a) => selectedIds.has(a.id)), [inRange, selectedIds]);
+  const selected = useMemo(
+    () => inRange.filter((a) => selectedIds.has(a.id)),
+    [inRange, selectedIds]
+  );
   const active = selected.length > 0 ? selected : inRange;
 
   function toggleAll() {
-    setSelectedIds(selectedIds.size === inRange.length ? new Set() : new Set(inRange.map((a) => a.id)));
+    setSelectedIds(
+      selectedIds.size === inRange.length ? new Set() : new Set(inRange.map((a) => a.id))
+    );
   }
 
   function toggleOne(id: string) {
@@ -85,7 +106,9 @@ export function LaporanPage() {
     try {
       const items = activityList.map((activity) => ({
         activity,
-        plan: activity.performancePlanId ? (planById.get(activity.performancePlanId) ?? null) : null,
+        plan: activity.performancePlanId
+          ? (planById.get(activity.performancePlanId) ?? null)
+          : null,
         evidence: evidenceByActivityId.get(activity.id) ?? [],
       }));
       const blob = await generateDataDukungPdf(items, profile);
@@ -120,6 +143,69 @@ export function LaporanPage() {
     downloadBlob(blob, buildReportFilename('JSON', periodLabel, 'json'));
   }
 
+  /**
+   * Pola nama berkas untuk ZIP per kegiatan.
+   *
+   * Disimpan di localStorage, bukan di pengaturan aplikasi: ini preferensi
+   * pengunduhan di perangkat ini, bukan data kerja yang perlu ikut tersinkron
+   * antar perangkat lewat Drive.
+   */
+  const [namePattern, setNamePattern] = useState(() => {
+    try {
+      return localStorage.getItem('kiplog-pdf-name-pattern') || DEFAULT_PDF_NAME_PATTERN;
+    } catch {
+      return DEFAULT_PDF_NAME_PATTERN;
+    }
+  });
+  const [zipProgress, setZipProgress] = useState<{ done: number; total: number } | null>(null);
+
+  function updateNamePattern(value: string) {
+    setNamePattern(value);
+    try {
+      localStorage.setItem('kiplog-pdf-name-pattern', value);
+    } catch {
+      /* penyimpanan diblokir: pola tetap berlaku untuk sesi ini */
+    }
+  }
+
+  /** Contoh nama berkas dari kegiatan pertama, supaya pola bisa dinilai sebelum diunduh. */
+  const namePreview = (() => {
+    const sample = active[0];
+    if (!sample || !profile) return null;
+    return `${renderPdfName(namePattern, {
+      tanggal: sample.date,
+      nama: profile.name,
+      nip: profile.nip,
+      kegiatan: sample.description,
+      rk: sample.performancePlanId ? (planById.get(sample.performancePlanId)?.name ?? '') : '',
+    })}.pdf`;
+  })();
+
+  async function handlePerActivityZip() {
+    if (!profile) return;
+    setIsGenerating('perActivityZip');
+    setError(null);
+    setZipProgress({ done: 0, total: active.length });
+    try {
+      const items = active.map((activity) => ({
+        activity,
+        plan: activity.performancePlanId
+          ? (planById.get(activity.performancePlanId) ?? null)
+          : null,
+        evidence: evidenceByActivityId.get(activity.id) ?? [],
+      }));
+      const blob = await generatePerActivityPdfZip(items, profile, namePattern, setZipProgress);
+      downloadBlob(blob, buildReportFilename('DataDukungPerKegiatan', periodLabel, 'zip'));
+    } catch {
+      setError(
+        'Gagal membuat ZIP per kegiatan. Coba periode lebih pendek atau kurangi bukti bergambar.'
+      );
+    } finally {
+      setIsGenerating(null);
+      setZipProgress(null);
+    }
+  }
+
   async function handleEvidencePack() {
     if (!profile || active.length === 0) return;
     setIsGenerating('pack');
@@ -127,13 +213,17 @@ export function LaporanPage() {
     try {
       const items = active.map((activity) => ({
         activity,
-        plan: activity.performancePlanId ? (planById.get(activity.performancePlanId) ?? null) : null,
+        plan: activity.performancePlanId
+          ? (planById.get(activity.performancePlanId) ?? null)
+          : null,
         evidence: evidenceByActivityId.get(activity.id) ?? [],
       }));
       const blob = await generateEvidencePack(items, plans ?? [], profile);
       downloadBlob(blob, buildReportFilename('EvidencePack', periodLabel, 'zip'));
     } catch {
-      setError('Gagal membuat Evidence Pack. Coba periode lebih pendek atau kurangi bukti bergambar.');
+      setError(
+        'Gagal membuat Evidence Pack. Coba periode lebih pendek atau kurangi bukti bergambar.'
+      );
     } finally {
       setIsGenerating(null);
     }
@@ -178,7 +268,11 @@ export function LaporanPage() {
           <>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Dari</label>
-              <Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+              <Input
+                type="date"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Sampai</label>
@@ -193,7 +287,10 @@ export function LaporanPage() {
       </div>
 
       {inRange.length === 0 ? (
-        <EmptyState title="Tidak ada kegiatan pada periode ini." action={<Button onClick={() => setPeriodKind('bulanan')}>Ubah Periode</Button>} />
+        <EmptyState
+          title="Tidak ada kegiatan pada periode ini."
+          action={<Button onClick={() => setPeriodKind('bulanan')}>Ubah Periode</Button>}
+        />
       ) : (
         <>
           <div className="mb-4 flex flex-wrap gap-2">
@@ -201,7 +298,11 @@ export function LaporanPage() {
               <FileText className="h-4 w-4" aria-hidden="true" />
               {isGenerating === 'pdf' ? 'Membuat PDF…' : 'Unduh PDF Gabungan'}
             </Button>
-            <Button variant="outline" disabled={isGenerating !== null} onClick={() => void handleExcel()}>
+            <Button
+              variant="outline"
+              disabled={isGenerating !== null}
+              onClick={() => void handleExcel()}
+            >
               <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
               {isGenerating === 'excel' ? 'Membuat Excel…' : 'Unduh Excel'}
             </Button>
@@ -217,9 +318,62 @@ export function LaporanPage() {
               <Printer className="h-4 w-4" aria-hidden="true" />
               Cetak (HTML)
             </Button>
-            <Button variant="outline" disabled={isGenerating !== null} onClick={() => void handleEvidencePack()}>
+            <Button
+              variant="outline"
+              disabled={isGenerating !== null || active.length === 0}
+              onClick={() => void handlePerActivityZip()}
+            >
+              <FileText className="h-4 w-4" aria-hidden="true" />
+              {isGenerating === 'perActivityZip'
+                ? `Membuat ZIP… ${zipProgress?.done ?? 0}/${zipProgress?.total ?? 0}`
+                : 'Unduh ZIP (PDF per kegiatan)'}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={isGenerating !== null}
+              onClick={() => void handleEvidencePack()}
+            >
               <Archive className="h-4 w-4" aria-hidden="true" />
               {isGenerating === 'pack' ? 'Membuat Evidence Pack…' : 'Unduh Evidence Pack (ZIP)'}
+            </Button>
+          </div>
+
+          <div className="mt-4 space-y-2 rounded-card border border-border bg-card p-3">
+            <label htmlFor="pdf-name-pattern" className="text-xs font-medium">
+              Nama berkas di dalam ZIP per kegiatan
+            </label>
+            <input
+              id="pdf-name-pattern"
+              value={namePattern}
+              onChange={(e) => updateNamePattern(e.target.value)}
+              className="w-full rounded-control border border-border bg-background px-3 py-2 text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              Contoh hasil:{' '}
+              {namePreview ? (
+                <code className="break-all">{namePreview}</code>
+              ) : (
+                <span className="italic">tidak ada kegiatan pada periode ini</span>
+              )}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Token yang bisa dipakai:{' '}
+              {PDF_NAME_TOKENS.map((t, i) => (
+                <span key={t.token}>
+                  {i > 0 ? ', ' : ''}
+                  <code title={t.label}>{t.token}</code>
+                </span>
+              ))}
+              . Dua kegiatan pada hari yang sama otomatis diberi nomor urut supaya tidak saling
+              menimpa saat diekstrak.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => updateNamePattern(DEFAULT_PDF_NAME_PATTERN)}
+            >
+              Kembalikan pola bawaan
             </Button>
           </div>
 
@@ -234,7 +388,11 @@ export function LaporanPage() {
               <thead className="bg-secondary text-left text-xs text-secondary-foreground">
                 <tr>
                   <th className="w-8 p-3">
-                    <Checkbox checked={selectedIds.size === inRange.length && inRange.length > 0} onCheckedChange={toggleAll} aria-label="Pilih semua" />
+                    <Checkbox
+                      checked={selectedIds.size === inRange.length && inRange.length > 0}
+                      onCheckedChange={toggleAll}
+                      aria-label="Pilih semua"
+                    />
                   </th>
                   <th className="p-3">Tanggal</th>
                   <th className="p-3">Kegiatan</th>
@@ -247,16 +405,29 @@ export function LaporanPage() {
                 {inRange.map((activity) => (
                   <tr key={activity.id} className="border-t border-border">
                     <td className="p-3">
-                      <Checkbox checked={selectedIds.has(activity.id)} onCheckedChange={() => toggleOne(activity.id)} aria-label={`Pilih ${activity.description}`} />
+                      <Checkbox
+                        checked={selectedIds.has(activity.id)}
+                        onCheckedChange={() => toggleOne(activity.id)}
+                        aria-label={`Pilih ${activity.description}`}
+                      />
                     </td>
                     <td className="p-3 whitespace-nowrap">{formatIndonesianDate(activity.date)}</td>
                     <td className="p-3">{activity.description}</td>
                     <td className="p-3 text-muted-foreground">
-                      {activity.performancePlanId ? (planById.get(activity.performancePlanId)?.displayName ?? planById.get(activity.performancePlanId)?.name ?? '-') : '-'}
+                      {activity.performancePlanId
+                        ? (planById.get(activity.performancePlanId)?.displayName ??
+                          planById.get(activity.performancePlanId)?.name ??
+                          '-')
+                        : '-'}
                     </td>
                     <td className="p-3">{activity.progress}</td>
                     <td className="p-3 text-right">
-                      <Button size="sm" variant="ghost" disabled={isGenerating !== null} onClick={() => void handlePdf([activity])}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={isGenerating !== null}
+                        onClick={() => void handlePdf([activity])}
+                      >
                         PDF
                       </Button>
                     </td>
@@ -277,7 +448,8 @@ export function LaporanPage() {
             </Button>
           </div>
           <h1 className="mb-4 text-lg font-semibold">
-            Laporan Kegiatan — {formatIndonesianDate(period.startDate)} s.d. {formatIndonesianDate(period.endDate)}
+            Laporan Kegiatan — {formatIndonesianDate(period.startDate)} s.d.{' '}
+            {formatIndonesianDate(period.endDate)}
           </h1>
           <table className="w-full border-collapse text-xs">
             <thead>
@@ -296,7 +468,9 @@ export function LaporanPage() {
                 <tr key={i}>
                   {Object.entries(row).map(([key, value]) => (
                     <td key={key} className="border border-border p-1">
-                      {key === 'Tanggal' ? formatIndonesianDate(formatDateString(value as Date)) : String(value)}
+                      {key === 'Tanggal'
+                        ? formatIndonesianDate(formatDateString(value as Date))
+                        : String(value)}
                     </td>
                   ))}
                 </tr>
