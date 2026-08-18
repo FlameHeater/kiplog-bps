@@ -185,7 +185,7 @@ export function autofillBlockedReason(activity: Activity): string | null {
  * dari gejalanya, dan itu sudah sekali menghabiskan satu putaran perbaikan.
  * Naikkan angka ini setiap kali isi skrip berubah.
  */
-export const AUTOFILL_VERSION = 10;
+export const AUTOFILL_VERSION = 11;
 
 /** Jeda antar langkah, memberi waktu popup KipApp muncul dan menutup. */
 export const AUTOFILL_STEP_DELAY_MS = 250;
@@ -1106,6 +1106,14 @@ export const AUTOFILL_SCRIPT = `(function () {
   /**
    * Mode otomatis: mengisi, menekan Save, membuka Add, lalu lanjut sendiri.
    *
+   * TIDAK ada penanda "sudah pernah disimpan". Penanda semacam itu adalah
+   * tebakan lokal tentang keadaan sistem lain, dan pemilik proyek bisa
+   * menghapus entri langsung di KipApp kapan saja — begitu itu terjadi,
+   * penandanya salah dan kegiatan yang belum masuk akan dilewati diam-diam.
+   * Antrean karena itu selalu mengerjakan kegiatan yang sedang ditunjuknya;
+   * yang menentukan sudah sampai mana adalah posisi antrean dan mata pengguna,
+   * bukan catatan yang berpura-pura tahu isi KipApp.
+   *
    * Diminta eksplisit pemilik proyek, mengubah CON-03a yang semula melarang
    * skrip menekan Save. Konsekuensinya nyata dan disadari: yang masuk ke sistem
    * kinerja resmi bukan lagi yang dilihat manusia, melainkan yang skrip anggap
@@ -1117,7 +1125,6 @@ export const AUTOFILL_SCRIPT = `(function () {
    * teks atau nama class notifikasi yang bisa berganti.
    */
   var AUTO_DELAY = 1500;
-  var SAVED_KEY = 'kiplog-autofill-saved';
   var LIMIT_KEY = 'kiplog-autofill-limit';
   var autoRunning = false;
   var autoAbort = false;
@@ -1156,36 +1163,6 @@ export const AUTOFILL_SCRIPT = `(function () {
     panel.querySelector('#kiplog-auto').textContent =
       'Jalankan otomatis (' + (limit === Infinity ? 'semua sisa' : count) +
       ' kegiatan, menekan Save sendiri)';
-  }
-
-  function itemSignature(item) {
-    return item.tanggal + '|' + item.kegiatan;
-  }
-
-  function savedList() {
-    try {
-      var raw = localStorage.getItem(SAVED_KEY);
-      var parsed = raw ? JSON.parse(raw) : null;
-      if (!parsed || !queue || parsed.key !== queue.key) return [];
-      return parsed.sigs || [];
-    } catch (e) { return []; }
-  }
-
-  /**
-   * Penanda anti-ganda. Tanpa ini, menjalankan ulang panel di tengah antrean
-   * bisa menyimpan kegiatan yang sama dua kali — dan menghapus entri ganda di
-   * KipApp harus satu per satu.
-   */
-  function markSaved(item) {
-    try {
-      var sigs = savedList();
-      sigs.push(itemSignature(item));
-      localStorage.setItem(SAVED_KEY, JSON.stringify({ key: queue.key, sigs: sigs }));
-    } catch (e) { /* diabaikan */ }
-  }
-
-  function alreadySaved(item) {
-    return savedList().indexOf(itemSignature(item)) !== -1;
   }
 
   function buttonByText(text, root) {
@@ -1231,7 +1208,8 @@ export const AUTOFILL_SCRIPT = `(function () {
   function autoFinish() {
     autoRunning = false;
     setAutoUI(false);
-    out.innerHTML = '<b>Antrean selesai.</b><br><span style="color:#475569">' +
+    out.innerHTML = '<b>Antrean selesai.</b> ' + autoSavedCount + ' tersimpan.' +
+      '<br><span style="color:#475569">' +
       'Periksa daftar Pelaksanaan di KipApp untuk memastikan semuanya tercatat.</span>';
   }
 
@@ -1252,7 +1230,8 @@ export const AUTOFILL_SCRIPT = `(function () {
     setAutoUI(false);
     updateAutoLabel();
     var left = queue.items.length - queue.index;
-    out.innerHTML = '<b>Berhenti setelah ' + autoSavedCount + ' kegiatan.</b><br>' +
+    out.innerHTML = '<b>Berhenti setelah ' + autoSavedCount + ' kegiatan tersimpan.</b>' +
+      '<br>' +
       '<span style="color:#475569">Sisa ' + left + ' kegiatan. Periksa daftar Pelaksanaan di ' +
       'KipApp dulu, lalu tekan Jalankan otomatis lagi untuk melanjutkan.</span>';
   }
@@ -1261,12 +1240,6 @@ export const AUTOFILL_SCRIPT = `(function () {
     if (!autoRunning || autoAbort) return;
     renderQueue();
     var item = queue.items[queue.index];
-
-    if (alreadySaved(item)) {
-      hint('Kegiatan ini sudah pernah disimpan, dilewati.');
-      autoAdvance();
-      return;
-    }
 
     out.textContent = 'Otomatis: menyiapkan dialog\u2026';
     ensureDialog(function (opened) {
@@ -1313,7 +1286,6 @@ export const AUTOFILL_SCRIPT = `(function () {
           : 'dialog tidak menutup setelah Save, jadi belum tentu tersimpan');
         return;
       }
-      markSaved(item);
       autoSavedCount++;
       autoRemaining--;
       autoAdvance();

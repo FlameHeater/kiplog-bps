@@ -723,22 +723,6 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     expect(document.querySelector('.ant-modal-wrap')).not.toBeNull();
   });
 
-  it('tidak menyimpan ulang kegiatan yang sudah tersimpan saat dijalankan lagi', () => {
-    // Penghapusan entri ganda di KipApp harus satu per satu, jadi ini penting.
-    const second = { ...activity, date: '2026-08-18', description: 'Kegiatan hari berikutnya' };
-    const { batch } = buildAutofillBatch([activity, second], new Map([[plan.id, plan]]));
-    const first = wireSaveAndAdd();
-    startAuto(serializeAutofillBatch(batch));
-    expect(first.saved).toHaveLength(2);
-
-    document.getElementById('kiplog-autofill-panel')?.remove();
-    renderFakeKipAppDialog();
-    const again = wireSaveAndAdd();
-    startAuto(serializeAutofillBatch(batch));
-
-    expect(again.saved).toEqual([]);
-  });
-
   it('membuka dialog Add sendiri kalau belum terbuka', () => {
     const { batch } = buildAutofillBatch([activity], new Map([[plan.id, plan]]));
     const kipapp = wireSaveAndAdd();
@@ -1126,6 +1110,30 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
 
     expect(document.querySelector('#kiplog-out')!.textContent).toContain('centang tidak berubah');
+  });
+
+  it('selalu mengisi kegiatan yang sedang ditunjuk, tanpa menganggapnya sudah masuk', () => {
+    // Penanda "sudah pernah disimpan" sengaja TIDAK ada: itu tebakan lokal
+    // tentang isi KipApp, dan pengguna bisa menghapus entri di sana kapan saja.
+    // Begitu penandanya salah, kegiatan yang belum masuk akan dilewati diam-diam
+    // sementara panel terlihat berjalan — persis gejala yang dilaporkan.
+    const { batch } = buildAutofillBatch([activity], new Map([[plan.id, plan]]));
+    const first = wireSaveAndAdd();
+    runBookmarklet(serializeAutofillBatch(batch));
+    document.querySelector<HTMLButtonElement>('#kiplog-auto')!.click();
+    vi.runAllTimers();
+    expect(first.saved).toEqual([activity.description]);
+
+    // Dijalankan lagi atas antrean yang sama: harus dikerjakan lagi, bukan
+    // dilewati, karena entri itu bisa saja sudah dihapus di KipApp.
+    document.getElementById('kiplog-autofill-panel')!.remove();
+    renderFakeKipAppDialog();
+    const again = wireSaveAndAdd();
+    runBookmarklet(serializeAutofillBatch(batch));
+    document.querySelector<HTMLButtonElement>('#kiplog-auto')!.click();
+    vi.runAllTimers();
+
+    expect(again.saved).toEqual([activity.description]);
   });
 
   it('TIDAK menekan Save', () => {
