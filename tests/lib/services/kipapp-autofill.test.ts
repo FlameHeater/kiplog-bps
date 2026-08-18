@@ -140,7 +140,20 @@ describe('buildBookmarkletHref', () => {
  * - Jam Mulai/Selesai belum ada di DOM sampai "Gunakan jam" dicentang.
  */
 function renderFakeKipAppDialog(): void {
-  document.body.innerHTML = `
+  // Dirender ke wadahnya sendiri, TIDAK menimpa seluruh body. KipApp adalah
+  // SPA yang hanya merender ulang bagiannya sendiri; tiruan yang menyapu body
+  // akan ikut menghapus panel bookmarklet dan membuat mode otomatis tampak
+  // gagal padahal kodenya benar.
+  for (const id of ['rk-portal', 'date-portal', 'time-portal']) {
+    document.getElementById(id)?.remove();
+  }
+  let root = document.getElementById('kipapp-root');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'kipapp-root';
+    document.body.appendChild(root);
+  }
+  root.innerHTML = `
     <div class="ant-modal-wrap">
       <div class="ant-modal">
         <div class="ant-modal-content">
@@ -256,6 +269,7 @@ function renderFakeKipAppDialog(): void {
   const dateTrigger = document.querySelector<HTMLInputElement>('.ant-calendar-picker-input')!;
   const datePopup = document.createElement('div');
   datePopup.className = 'ant-calendar-picker-container';
+  datePopup.id = 'date-portal';
   document.body.appendChild(datePopup);
   dateTrigger.addEventListener('mousedown', () => {
     datePopup.innerHTML =
@@ -276,6 +290,7 @@ function renderFakeKipAppDialog(): void {
   const slot = document.querySelector<HTMLDivElement>('#jam-slot')!;
   const timePopup = document.createElement('div');
   timePopup.className = 'ant-time-picker-panel';
+  timePopup.id = 'time-portal';
   document.body.appendChild(timePopup);
 
   jamCheckbox.addEventListener('change', () => {
@@ -351,6 +366,7 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     vi.useFakeTimers();
     stubVisibility();
     localStorage.clear();
+    document.body.innerHTML = '';
     renderFakeKipAppDialog();
   });
 
@@ -622,6 +638,125 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     // overflow wajib menyertai resize; tanpa itu resize:both tidak berlaku.
     expect(panel.style.resize).toBe('both');
     expect(panel.style.overflow).toBe('auto');
+  });
+
+  /**
+   * Meniru siklus KipApp yang sesungguhnya untuk mode otomatis: menekan Save
+   * MENUTUP dialog (itulah tanda tersimpan), dan menekan Add membangunnya
+   * kembali dalam keadaan kosong.
+   */
+  function wireSaveAndAdd(options?: { rejectSave?: boolean }) {
+    const saved: string[] = [];
+    const add = document.createElement('button');
+    add.textContent = 'Add';
+    document.body.appendChild(add);
+
+    function attachSave() {
+      const save = document.querySelector<HTMLButtonElement>('#f-save');
+      if (!save) return;
+      save.addEventListener('click', () => {
+        if (options?.rejectSave) {
+          // Validasi gagal: dialog TETAP terbuka, ditambah pesan error.
+          const err = document.createElement('div');
+          err.className = 'ant-form-explain';
+          err.textContent = 'Wajib diisi';
+          document.querySelector('.ant-modal-body')!.appendChild(err);
+          return;
+        }
+        saved.push(document.querySelector<HTMLTextAreaElement>('#f-keg')!.value);
+        document.querySelector('.ant-modal-wrap')!.remove();
+      });
+    }
+    attachSave();
+
+    add.addEventListener('click', () => {
+      if (document.querySelector('.ant-modal-wrap')) return;
+      renderFakeKipAppDialog();
+      attachSave();
+    });
+
+    return { saved };
+  }
+
+  function startAuto(batchJson: string) {
+    runBookmarklet(batchJson);
+    document.querySelector<HTMLButtonElement>('#kiplog-auto')!.click();
+    vi.runAllTimers();
+  }
+
+  it('menyimpan seluruh antrean sendiri: isi, Save, Add, lanjut', () => {
+    const second = { ...activity, date: '2026-08-18', description: 'Kegiatan hari berikutnya' };
+    const { batch } = buildAutofillBatch([activity, second], new Map([[plan.id, plan]]));
+    const kipapp = wireSaveAndAdd();
+
+    startAuto(serializeAutofillBatch(batch));
+
+    expect(kipapp.saved).toEqual([activity.description, second.description]);
+    expect(document.querySelector('#kiplog-out')!.textContent).toContain('Antrean selesai');
+  });
+
+  it('BERHENTI pada kegagalan pertama, tidak melanjutkan ke kegiatan berikutnya', () => {
+    // Field Data Dukung dihapus supaya pengisian dilaporkan tidak lengkap.
+    const second = { ...activity, date: '2026-08-18', description: 'Kegiatan hari berikutnya' };
+    const { batch } = buildAutofillBatch([activity, second], new Map([[plan.id, plan]]));
+    const kipapp = wireSaveAndAdd();
+    document.querySelector('#f-link')!.closest('.ant-row')!.remove();
+
+    startAuto(serializeAutofillBatch(batch));
+
+    expect(kipapp.saved).toEqual([]);
+    expect(document.querySelector('#kiplog-out')!.textContent).toContain('Berhenti di kegiatan 1');
+  });
+
+  it('BERHENTI saat KipApp menolak simpanan, tanpa menganggapnya tersimpan', () => {
+    const second = { ...activity, date: '2026-08-18', description: 'Kegiatan hari berikutnya' };
+    const { batch } = buildAutofillBatch([activity, second], new Map([[plan.id, plan]]));
+    wireSaveAndAdd({ rejectSave: true });
+
+    startAuto(serializeAutofillBatch(batch));
+
+    const out = document.querySelector('#kiplog-out')!.textContent!;
+    expect(out).toContain('Berhenti');
+    expect(out).toContain('menolak');
+    // Dialog masih terbuka, jadi tidak boleh dianggap sukses lalu lanjut.
+    expect(document.querySelector('.ant-modal-wrap')).not.toBeNull();
+  });
+
+  it('tidak menyimpan ulang kegiatan yang sudah tersimpan saat dijalankan lagi', () => {
+    // Penghapusan entri ganda di KipApp harus satu per satu, jadi ini penting.
+    const second = { ...activity, date: '2026-08-18', description: 'Kegiatan hari berikutnya' };
+    const { batch } = buildAutofillBatch([activity, second], new Map([[plan.id, plan]]));
+    const first = wireSaveAndAdd();
+    startAuto(serializeAutofillBatch(batch));
+    expect(first.saved).toHaveLength(2);
+
+    document.getElementById('kiplog-autofill-panel')?.remove();
+    renderFakeKipAppDialog();
+    const again = wireSaveAndAdd();
+    startAuto(serializeAutofillBatch(batch));
+
+    expect(again.saved).toEqual([]);
+  });
+
+  it('membuka dialog Add sendiri kalau belum terbuka', () => {
+    const { batch } = buildAutofillBatch([activity], new Map([[plan.id, plan]]));
+    const kipapp = wireSaveAndAdd();
+    document.querySelector('.ant-modal-wrap')!.remove();
+
+    startAuto(serializeAutofillBatch(batch));
+
+    expect(kipapp.saved).toEqual([activity.description]);
+  });
+
+  it('berhenti kalau tombol Add tidak ada, alih-alih diam-diam tidak melakukan apa pun', () => {
+    const { batch } = buildAutofillBatch([activity], new Map([[plan.id, plan]]));
+    document.querySelector('.ant-modal-wrap')!.remove();
+
+    startAuto(serializeAutofillBatch(batch));
+
+    expect(document.querySelector('#kiplog-out')!.textContent).toContain(
+      'dialog Add tidak terbuka'
+    );
   });
 
   it('TIDAK menekan Save', () => {

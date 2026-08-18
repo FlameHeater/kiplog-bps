@@ -291,8 +291,21 @@ export const AUTOFILL_SCRIPT = `(function () {
     return modals.length ? modals[modals.length - 1] : null;
   }
 
-  var MODAL = findModal();
-  var SCOPE = MODAL || document.body;
+  /**
+   * Lingkup dihitung ULANG tiap kali dipakai, bukan sekali di awal: dalam mode
+   * otomatis dialog dibuat dan dimusnahkan berkali-kali, dan rujukan ke dialog
+   * yang sudah dibuang membuat seluruh pencarian field menunjuk ke ruang kosong.
+   */
+  var MODAL = null;
+  var SCOPE = document.body;
+
+  function refreshScope() {
+    MODAL = findModal();
+    SCOPE = MODAL || document.body;
+    return MODAL;
+  }
+
+  refreshScope();
 
   /**
    * Baris field milik sebuah label.
@@ -419,6 +432,7 @@ export const AUTOFILL_SCRIPT = `(function () {
   }
 
   function apply(data, report) {
+    refreshScope();
     var done = [];
     var failed = [];
     var notes = [];
@@ -632,6 +646,10 @@ export const AUTOFILL_SCRIPT = `(function () {
       '</div>' +
       '<button id="kiplog-nextday" style="width:100%;margin-top:6px;padding:6px;border:1px solid #cbd5e1;' +
       'border-radius:6px;background:#fff;cursor:pointer">Lompat ke tanggal berikutnya &raquo;</button>' +
+      '<button id="kiplog-auto" style="width:100%;margin-top:6px;padding:8px;border:0;border-radius:6px;' +
+      'background:#b45309;color:#fff;font-weight:600;cursor:pointer">Jalankan otomatis (menekan Save sendiri)</button>' +
+      '<button id="kiplog-abort" style="display:none;width:100%;margin-top:6px;padding:8px;border:0;' +
+      'border-radius:6px;background:#dc2626;color:#fff;font-weight:600;cursor:pointer">BERHENTI</button>' +
       '<button id="kiplog-quit" style="width:100%;margin-top:6px;padding:6px;border:0;' +
       'border-radius:6px;background:none;color:#64748b;cursor:pointer">Tutup antrean</button>' +
     '</div>' +
@@ -900,6 +918,183 @@ export const AUTOFILL_SCRIPT = `(function () {
       '<br><span style="color:#475569">Sudah diperiksa ulang, bukan sekadar dicoba. Tekan Save sendiri' +
       (queue ? ', lalu Berikutnya.' : '.') + '</span>';
   }
+
+  /**
+   * Mode otomatis: mengisi, menekan Save, membuka Add, lalu lanjut sendiri.
+   *
+   * Diminta eksplisit pemilik proyek, mengubah CON-03a yang semula melarang
+   * skrip menekan Save. Konsekuensinya nyata dan disadari: yang masuk ke sistem
+   * kinerja resmi bukan lagi yang dilihat manusia, melainkan yang skrip anggap
+   * benar. Karena itu pengamannya dibuat ketat, bukan sekadar ada.
+   *
+   * BERHASIL DIUKUR DARI MENUTUPNYA DIALOG, bukan dari notifikasi. Setelah Save
+   * diterima KipApp, dialognya menutup; kalau validasi menolak, dialognya tetap
+   * terbuka. Sinyal itu melekat pada perilaku aplikasinya sendiri, tidak pada
+   * teks atau nama class notifikasi yang bisa berganti.
+   */
+  var AUTO_DELAY = 1500;
+  var SAVED_KEY = 'kiplog-autofill-saved';
+  var autoRunning = false;
+  var autoAbort = false;
+
+  function itemSignature(item) {
+    return item.tanggal + '|' + item.kegiatan;
+  }
+
+  function savedList() {
+    try {
+      var raw = localStorage.getItem(SAVED_KEY);
+      var parsed = raw ? JSON.parse(raw) : null;
+      if (!parsed || !queue || parsed.key !== queue.key) return [];
+      return parsed.sigs || [];
+    } catch (e) { return []; }
+  }
+
+  /**
+   * Penanda anti-ganda. Tanpa ini, menjalankan ulang panel di tengah antrean
+   * bisa menyimpan kegiatan yang sama dua kali — dan menghapus entri ganda di
+   * KipApp harus satu per satu.
+   */
+  function markSaved(item) {
+    try {
+      var sigs = savedList();
+      sigs.push(itemSignature(item));
+      localStorage.setItem(SAVED_KEY, JSON.stringify({ key: queue.key, sigs: sigs }));
+    } catch (e) { /* diabaikan */ }
+  }
+
+  function alreadySaved(item) {
+    return savedList().indexOf(itemSignature(item)) !== -1;
+  }
+
+  function buttonByText(text, root) {
+    var wanted = norm(text);
+    var buttons = list('button', root || document);
+    for (var i = 0; i < buttons.length; i++) {
+      var b = buttons[i];
+      if (inPanel(b) || b.disabled || !visible(b)) continue;
+      if (norm(b.textContent) === wanted) return b;
+    }
+    return null;
+  }
+
+  function errorVisible() {
+    var markers = list('.ant-form-explain, .ant-notification-notice-error, .ant-message-error');
+    for (var i = 0; i < markers.length; i++) {
+      if (!inPanel(markers[i]) && visible(markers[i])) return true;
+    }
+    return false;
+  }
+
+  function setAutoUI(running) {
+    panel.querySelector('#kiplog-auto').style.display = running ? 'none' : '';
+    panel.querySelector('#kiplog-abort').style.display = running ? '' : 'none';
+    panel.querySelector('#kiplog-fill').disabled = running;
+    panel.querySelector('#kiplog-next').disabled = running || queue.index >= queue.items.length - 1;
+    panel.querySelector('#kiplog-prev').disabled = running || queue.index === 0;
+    panel.querySelector('#kiplog-nextday').disabled = running;
+  }
+
+  function autoStopWith(message) {
+    autoRunning = false;
+    autoAbort = true;
+    setAutoUI(false);
+    out.innerHTML = '<b style="color:#b45309">Berhenti di kegiatan ' + (queue.index + 1) + ':</b> ' +
+      message + '<br><span style="color:#475569">Tidak ada yang disimpan lagi setelah ini. ' +
+      'Periksa KipApp, perbaiki, lalu lanjutkan sendiri atau jalankan otomatis lagi.</span>';
+  }
+
+  function autoFinish() {
+    autoRunning = false;
+    setAutoUI(false);
+    out.innerHTML = '<b>Antrean selesai.</b><br><span style="color:#475569">' +
+      'Periksa daftar Pelaksanaan di KipApp untuk memastikan semuanya tercatat.</span>';
+  }
+
+  function autoStart() {
+    if (!queue || autoRunning) return;
+    autoRunning = true;
+    autoAbort = false;
+    setAutoUI(true);
+    autoStep();
+  }
+
+  function autoStep() {
+    if (!autoRunning || autoAbort) return;
+    renderQueue();
+    var item = queue.items[queue.index];
+
+    if (alreadySaved(item)) {
+      hint('Kegiatan ini sudah pernah disimpan, dilewati.');
+      autoAdvance();
+      return;
+    }
+
+    out.textContent = 'Otomatis: menyiapkan dialog\u2026';
+    ensureDialog(function (opened) {
+      if (!opened) { autoStopWith('dialog Add tidak terbuka'); return; }
+      out.textContent = 'Otomatis: mengisi kegiatan ' + (queue.index + 1) + '\u2026';
+      apply(item, function (done, failed, notes) {
+        if (autoAbort) return;
+        if (failed.length) {
+          autoStopWith('pengisian tidak lengkap \u2014 ' + failed.join('; '));
+          return;
+        }
+        if (notes.length) hint('Catatan: ' + notes.join('; '));
+        autoSave(item);
+      });
+    });
+  }
+
+  function ensureDialog(callback) {
+    if (refreshScope()) { callback(true); return; }
+    var add = buttonByText('Add');
+    if (!add) { callback(false); return; }
+    tap(add);
+    waitFor(function () { return refreshScope(); }, function (modal) { callback(!!modal); });
+  }
+
+  function autoSave(item) {
+    var save = buttonByText('Save', MODAL || document);
+    if (!save) { autoStopWith('tombol Save tidak ditemukan di dialog'); return; }
+    var previous = MODAL;
+    out.textContent = 'Otomatis: menyimpan\u2026';
+    tap(save);
+
+    waitFor(function () {
+      if (errorVisible()) return 'ditolak';
+      var current = findModal();
+      return (!current || current !== previous) ? 'tersimpan' : null;
+    }, function (result) {
+      if (autoAbort) return;
+      if (result !== 'tersimpan') {
+        autoStopWith(result === 'ditolak'
+          ? 'KipApp menolak simpanan ini (validasi gagal)'
+          : 'dialog tidak menutup setelah Save, jadi belum tentu tersimpan');
+        return;
+      }
+      markSaved(item);
+      autoAdvance();
+    }, 40);
+  }
+
+  function autoAdvance() {
+    if (autoAbort) return;
+    if (queue.index >= queue.items.length - 1) { autoFinish(); return; }
+    queue.index++;
+    saveProgress();
+    renderQueue();
+    setTimeout(autoStep, AUTO_DELAY);
+  }
+
+  panel.querySelector('#kiplog-auto').onclick = autoStart;
+  panel.querySelector('#kiplog-abort').onclick = function () {
+    autoAbort = true;
+    autoRunning = false;
+    setAutoUI(false);
+    out.innerHTML = '<b>Dihentikan.</b><br><span style="color:#475569">' +
+      'Kegiatan yang sudah tersimpan tidak akan diulang kalau dijalankan lagi.</span>';
+  };
 
   panel.querySelector('#kiplog-fill').onclick = function () {
     if (!queue) return;

@@ -128,7 +128,8 @@ Batasnya, dan ini disengaja:
 
 - Skrip menolak berjalan di host selain `kipapp.bps.go.id` dan `webapps.bps.go.id` (KipApp dapat diakses lewat keduanya).
 - Skrip hanya **menulis** ke field — tidak membaca data KipApp dan tidak mengirim apa pun ke mana pun.
-- Skrip **tidak menekan Save**. Pencocokan bertumpu pada kerangka Ant Design yang dipakai KipApp, dan tata letak itu bisa berubah tanpa pemberitahuan; karena itu pemeriksaan akhir tetap milik pengguna. Setiap field dibaca ulang setelah diisi, jadi laporan "Terisi" berarti sudah diperiksa, bukan sekadar dicoba.
+- **Bawaannya skrip tidak menekan Save** — ia mengisi, memverifikasi, lalu berhenti. Setiap field dibaca ulang setelah diisi, jadi laporan "Terisi" berarti sudah diperiksa, bukan sekadar dicoba.
+- Tombol **"Jalankan otomatis"** pada antrean sebulan mencabut batas itu atas permintaan pemilik proyek: skrip mengisi, menekan Save, membuka Add, dan lanjut sendiri sampai antrean habis. Ia **berhenti total pada kegagalan pertama**, memakai menutupnya dialog sebagai bukti tersimpan (bukan teks notifikasi, yang bisa berganti), menyimpan penanda anti-ganda, dan menyediakan tombol BERHENTI yang selalu terlihat. Konsekuensinya nyata: yang masuk ke sistem kinerja resmi bukan lagi yang Anda lihat, melainkan yang skrip anggap benar — pakai setelah mode manual terbukti bersih.
 - Field yang gagal ditemukan dilaporkan, tidak didiamkan.
 - Tidak ada kredensial KipApp yang diminta atau disimpan. Tidak ada scraping, tidak ada headless browser, tidak ada login otomatis.
 - Kegiatan yang sudah dikirim untuk dinilai ditolak, karena KipApp sendiri tidak mengizinkan perubahan setelah itu.
