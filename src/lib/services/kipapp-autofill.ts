@@ -122,7 +122,11 @@ export function autofillBlockedReason(activity: Activity): string | null {
 }
 
 /** Jeda antar langkah, memberi waktu popup KipApp muncul dan menutup. */
-export const AUTOFILL_STEP_DELAY_MS = 300;
+export const AUTOFILL_STEP_DELAY_MS = 250;
+
+/** Batas menunggu satu keadaan (mis. daftar opsi muncul) sebelum menyerah. */
+export const AUTOFILL_WAIT_TRIES = 20;
+export const AUTOFILL_WAIT_INTERVAL_MS = 120;
 
 /**
  * Sumber skrip bookmarklet, sengaja disimpan sebagai teks yang bisa dibaca
@@ -132,12 +136,19 @@ export const AUTOFILL_STEP_DELAY_MS = 300;
  * dalam halaman pihak lain: tidak ada bundler, tidak boleh memuat berkas dari
  * luar (CSP KipApp hampir pasti memblokirnya), dan harus utuh sendiri.
  *
- * BERJALAN BERTAHAP DENGAN JEDA. Rencana Kinerja dan Tanggal bukan kontrol
- * HTML biasa: keduanya baru memunculkan isinya SETELAH diklik. Menulis nilai
- * langsung ke kontrolnya tidak berpengaruh sama sekali — itulah yang membuat
- * percobaan pertama pengguna gagal tepat pada kedua field itu. Karena
- * popup-nya muncul belakangan, pengisian dilakukan sebagai rangkaian langkah
- * berjeda, bukan satu jalan lurus.
+ * TIGA PRINSIP yang lahir dari kegagalan percobaan nyata pengguna:
+ *
+ * 1. **Menunggu, bukan menebak waktu.** Rencana Kinerja dan Tanggal baru
+ *    memunculkan isinya setelah diklik, dan kapan tepatnya tidak bisa
+ *    dipastikan. Skrip menunggu keadaan yang dituju sampai muncul (dengan
+ *    batas), bukan berharap satu jeda tetap sudah cukup.
+ * 2. **Memeriksa, bukan mengaku.** Setiap field diperiksa ulang setelah diisi.
+ *    Versi sebelumnya melaporkan "Terisi" begitu ia selesai mengklik, sehingga
+ *    pengguna diberi tahu berhasil padahal Rencana Kinerja dan Tanggal masih
+ *    kosong — kesalahan yang lebih buruk daripada gagalnya sendiri.
+ * 3. **Tidak meninggalkan form lebih buruk daripada saat ditemukan.**
+ *    Mencentang "Gunakan jam" memunculkan dua field WAJIB baru; kalau jamnya
+ *    ternyata gagal diisi, centang itu dikembalikan seperti semula.
  */
 export const AUTOFILL_SCRIPT = `(function () {
   var HOSTS = ${JSON.stringify(KIPAPP_HOSTS)};
@@ -148,6 +159,8 @@ export const AUTOFILL_SCRIPT = `(function () {
 
   var PANEL_ID = 'kiplog-autofill-panel';
   var DELAY = ${AUTOFILL_STEP_DELAY_MS};
+  var TRIES = ${AUTOFILL_WAIT_TRIES};
+  var INTERVAL = ${AUTOFILL_WAIT_INTERVAL_MS};
   var OLD = document.getElementById(PANEL_ID);
   if (OLD) OLD.remove();
 
@@ -210,20 +223,83 @@ export const AUTOFILL_SCRIPT = `(function () {
     return -1;
   }
 
+  /**
+   * Seluruh label yang dikenal skrip ini. Dipakai untuk mengetahui kapan
+   * pencarian sudah keluar dari baris milik satu label.
+   */
+  var KNOWN_LABELS = [
+    'Rencana Kinerja', 'Tanggal', 'Jam Mulai', 'Jam Selesai', 'Kegiatan',
+    'Progres', 'Capaian', 'Data Dukung', 'Masukan ke capaian SKP',
+    'Gunakan jam', 'Gunakan periode tanggal', 'Pegawai', 'Tahun', 'SKP'
+  ];
+
+  function isKnownLabel(text) {
+    for (var k = 0; k < KNOWN_LABELS.length; k++) {
+      if (norm(KNOWN_LABELS[k]) === text) return true;
+    }
+    return false;
+  }
+
+  /** Peta posisi seluruh elemen, dibangun sekali per pencarian. */
+  function positionMap() {
+    var all = document.getElementsByTagName('*');
+    var map = [];
+    for (var i = 0; i < all.length; i++) map.push(all[i]);
+    return map;
+  }
+
+  /**
+   * Apakah ada label lain DI ANTARA label kita dan kontrol yang dipilih.
+   *
+   * Kalau ada, kontrol itu milik label lain, bukan milik kita. Aturan ini
+   * dipilih karena bisa dinalar langsung dari tata letak: sebuah field selalu
+   * berdampingan dengan labelnya, dan tidak pernah ada label lain menyelip di
+   * antaranya. Pembanding berbasis jarak sempat dicoba dan ternyata rapuh.
+   */
+  function labelBetween(map, ownLabel, ctl) {
+    var a = map.indexOf(ownLabel);
+    var b = map.indexOf(ctl);
+    var lo = Math.min(a, b);
+    var hi = Math.max(a, b);
+    for (var i = lo + 1; i < hi; i++) {
+      var el = map[i];
+      if (el === ownLabel || inPanel(el)) continue;
+      if (el.contains(ownLabel) || el.contains(ctl)) continue;
+      if (isKnownLabel(norm(el.textContent))) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Kontrol harus benar-benar milik labelnya.
+   *
+   * Tanpa penjagaan ini pencarian merambat naik sampai menemukan kontrol apa
+   * pun, dan ketika sebuah field memang tidak ada — misalnya pemilih jam yang
+   * tidak dikenali — nilainya tertulis diam-diam ke field lain yang tidak ada
+   * hubungannya. Melaporkan "tidak ditemukan" jauh lebih baik daripada mengisi
+   * tempat yang salah.
+   */
+  var MAX_CONTROL_DISTANCE = 40;
+
   function controlNear(el, selector) {
-    var anchor = flatIndex(el);
-    var best = null;
-    var bestDistance = Infinity;
+    var map = positionMap();
+    var anchor = map.indexOf(el);
     var scope = el;
-    for (var up = 0; up < 6 && scope; up++) {
+    for (var up = 0; up < 5 && scope; up++) {
       var found = list(selector || CONTROLS, scope);
+      var best = null;
+      var bestDistance = Infinity;
       for (var i = 0; i < found.length; i++) {
         var c = found[i];
         if (c.disabled || c.readOnly || inPanel(c)) continue;
-        var d = Math.abs(flatIndex(c) - anchor);
+        var d = Math.abs(map.indexOf(c) - anchor);
         if (d < bestDistance) { best = c; bestDistance = d; }
       }
-      if (best) return best;
+      if (best) {
+        if (bestDistance > MAX_CONTROL_DISTANCE) return null;
+        if (labelBetween(map, el, best)) return null;
+        return best;
+      }
       scope = scope.parentElement;
     }
     return null;
@@ -301,24 +377,51 @@ export const AUTOFILL_SCRIPT = `(function () {
     return best;
   }
 
-  function setToggle(labelText, wanted) {
-    var cb = findControl(labelText, 'input[type=checkbox]');
-    if (!cb) return null;
-    if (cb.checked !== wanted) cb.click();
-    return cb.checked === wanted;
+  /**
+   * Menunggu sebuah keadaan tercapai, bukan menebak berapa lama popup butuh
+   * waktu. \`test\` mengembalikan nilai apa pun yang tidak kosong bila sudah.
+   */
+  function waitFor(test, done, tries) {
+    if (tries === undefined) tries = TRIES;
+    var result = null;
+    try { result = test(); } catch (e) { result = null; }
+    if (result || tries <= 0) { done(result); return; }
+    setTimeout(function () { waitFor(test, done, tries - 1); }, INTERVAL);
+  }
+
+  /**
+   * Apakah nilai benar-benar TERCATAT di kontrolnya — bukan sekadar terketik.
+   * Combobox menaruh pilihannya sebagai teks di sekitar kontrol, bukan selalu
+   * di \`value\`, jadi keduanya diperiksa.
+   */
+  function holdsValue(ctl, value) {
+    var wanted = norm(value);
+    if (norm(ctl.value) === wanted) return true;
+    var scope = ctl;
+    for (var up = 0; up < 3 && scope; up++) {
+      if (norm(scope.textContent).indexOf(wanted) !== -1) return true;
+      scope = scope.parentElement;
+    }
+    return false;
   }
 
   function mark(el) {
     if (el) el.style.outline = '2px solid #16a34a';
   }
 
+  /** Tiap langkah memanggil next() sendiri, supaya boleh menunggu selama perlu. */
   function run(steps, done) {
     var i = 0;
     function next() {
       if (i >= steps.length) { done(); return; }
       var step = steps[i++];
-      try { step(); } catch (e) { /* satu langkah gagal tidak menghentikan sisanya */ }
-      setTimeout(next, DELAY);
+      var moved = false;
+      function go() {
+        if (moved) return;
+        moved = true;
+        setTimeout(next, DELAY);
+      }
+      try { step(go); } catch (e) { go(); }
     }
     next();
   }
@@ -328,21 +431,28 @@ export const AUTOFILL_SCRIPT = `(function () {
     var failed = [];
     var notes = [];
     var steps = [];
-    var pending = {};
+    var wantJam = !!(data.jamMulai && data.jamSelesai);
+    var jamCheckbox = null;
 
     function ok(label, el) { done.push(label); mark(el); }
+    function filled(label) { return done.indexOf(label) !== -1; }
 
-    var wantJam = !!(data.jamMulai && data.jamSelesai);
+    // 1. Pengalih tampilan: field jam belum ada di halaman sebelum dicentang.
+    steps.push(function (next) {
+      var range = findControl('Gunakan periode tanggal', 'input[type=checkbox]');
+      if (range && range.checked) range.click();
 
-    // 1. Pengalih tampilan lebih dulu: field jam belum ada di halaman sebelum ini.
-    steps.push(function () {
-      setToggle('Gunakan periode tanggal', false);
-      var jam = setToggle('Gunakan jam', wantJam);
-      if (wantJam && jam === null) notes.push('checkbox "Gunakan jam" tidak ditemukan');
+      jamCheckbox = findControl('Gunakan jam', 'input[type=checkbox]');
+      if (!jamCheckbox) {
+        if (wantJam) notes.push('checkbox "Gunakan jam" tidak ditemukan');
+      } else if (jamCheckbox.checked !== wantJam) {
+        jamCheckbox.click();
+      }
+      next();
     });
 
-    // 2. Field biasa — cukup ditulis langsung.
-    steps.push(function () {
+    // 2. Field biasa — ditulis langsung, lalu dibaca ulang untuk memastikan.
+    steps.push(function (next) {
       for (var i = 0; i < SIMPLE_LABELS.length; i++) {
         var key = SIMPLE_LABELS[i][0];
         var label = SIMPLE_LABELS[i][1];
@@ -352,74 +462,119 @@ export const AUTOFILL_SCRIPT = `(function () {
         if (!ctl) { failed.push(label + ' (field tidak ditemukan)'); continue; }
         if (ctl.type === 'checkbox') {
           if (ctl.checked !== !!value) ctl.click();
+          if (ctl.checked === !!value) ok(label, ctl);
+          else failed.push(label + ' (centang tidak berubah)');
         } else {
           setNative(ctl, String(value));
+          if (norm(ctl.value) === norm(String(value))) ok(label, ctl);
+          else failed.push(label + ' (nilai tidak tersimpan di field)');
         }
-        ok(label, ctl);
       }
+      next();
     });
 
     /**
-     * Combobox: klik untuk membuka, ketik untuk menyaring, lalu KLIK opsinya.
-     * Menulis nilai ke kontrolnya saja tidak memilih apa pun.
+     * Combobox: klik untuk membuka, ketik untuk menyaring, TUNGGU opsinya
+     * muncul, klik opsinya, lalu PASTIKAN pilihannya benar-benar tercatat.
+     * Mengetik saja tidak memilih apa pun — inilah yang membuat percobaan
+     * pengguna berhenti dengan teks tertulis tapi tidak terpilih.
      */
     function comboboxSteps(label, value) {
-      steps.push(function () {
-        var ctl = findControl(label);
-        if (!ctl) { failed.push(label + ' (field tidak ditemukan)'); return; }
-        pending[label] = ctl;
-        pending[label + ':before'] = snapshotInputs();
+      var ctl = null;
+      var search = null;
+      var before = null;
+
+      steps.push(function (next) {
+        ctl = findControl(label);
+        if (!ctl) { failed.push(label + ' (field tidak ditemukan)'); next(); return; }
+        before = snapshotInputs();
         tap(ctl);
+        ctl.focus();
+        next();
       });
-      steps.push(function () {
-        var ctl = pending[label];
-        if (!ctl) return;
-        var fresh = newInputs(pending[label + ':before']);
-        var search = fresh.length ? fresh[0] : ctl;
-        pending[label + ':search'] = search;
+
+      steps.push(function (next) {
+        if (!ctl) { next(); return; }
+        var fresh = newInputs(before);
+        search = fresh.length ? fresh[0] : ctl;
         setNative(search, value);
+        next();
       });
-      steps.push(function () {
-        var ctl = pending[label];
-        if (!ctl) return;
-        var option = findOption(value);
-        if (!option) {
-          // Teks pencarian TIDAK boleh ditinggalkan: kotaknya akan tampak
-          // terisi padahal tidak ada yang terpilih, dan itu justru menyesatkan
-          // lebih parah daripada kotak kosong.
-          var search = pending[label + ':search'];
-          if (search) { setNative(search, ''); press(search, 'Escape'); }
-          failed.push(label + ' (pilihan tidak ditemukan di daftar setelah dicari)');
-          return;
-        }
-        tap(option);
-        ok(label, ctl);
+
+      // Teks pencarian tidak boleh ditinggalkan saat gagal: kotaknya akan
+      // tampak terisi padahal tidak ada yang terpilih, dan itu lebih
+      // menyesatkan daripada kotak kosong.
+      function clearSearch() {
+        if (!search) return;
+        setNative(search, '');
+        press(search, 'Escape');
+      }
+
+      steps.push(function (next) {
+        if (!ctl) { next(); return; }
+        waitFor(function () { return findOption(value); }, function (option) {
+          // Tanpa opsi yang benar-benar diklik, pemeriksaan nilai TIDAK boleh
+          // dipercaya: teks yang barusan diketik sudah membuat kotaknya
+          // "berisi" nilai yang dicari, sehingga apa pun akan tampak berhasil.
+          if (!option) {
+            clearSearch();
+            failed.push(label + ' (pilihan tidak muncul di daftar setelah dicari)');
+            next();
+            return;
+          }
+          tap(option);
+          waitFor(function () { return holdsValue(ctl, value) ? 'ya' : null; }, function (recorded) {
+            if (recorded) {
+              ok(label, ctl);
+            } else {
+              clearSearch();
+              failed.push(label + ' (opsi diklik tapi tidak tercatat terpilih)');
+            }
+            next();
+          }, 8);
+        });
       });
     }
 
     /**
-     * Pemilih tanggal/jam: klik untuk membuka, lalu tulis ke input DI DALAM
-     * popup-nya — kalender KipApp memperlihatkan kotak isian sendiri di atas
-     * grid tanggal (terlihat berisi "2026-04-01", jadi formatnya ISO) — lalu
-     * Enter untuk menguncinya.
+     * Pemilih tanggal/jam: klik untuk membuka, lalu coba tulis ke fieldnya
+     * sendiri; kalau nilainya tidak tercatat, coba kotak isian yang muncul di
+     * dalam popup. Diperiksa setelah tiap percobaan, bukan diasumsikan.
      */
     function pickerSteps(label, value) {
-      steps.push(function () {
-        var ctl = findControl(label);
-        if (!ctl) { failed.push(label + ' (field tidak ditemukan)'); return; }
-        pending[label] = ctl;
-        pending[label + ':before'] = snapshotInputs();
+      var ctl = null;
+      var before = null;
+
+      steps.push(function (next) {
+        ctl = findControl(label);
+        if (!ctl) { failed.push(label + ' (field tidak ditemukan)'); next(); return; }
+        before = snapshotInputs();
         tap(ctl);
+        ctl.focus();
+        next();
       });
-      steps.push(function () {
-        var ctl = pending[label];
-        if (!ctl) return;
-        var fresh = newInputs(pending[label + ':before']);
-        var target = fresh.length ? fresh[0] : ctl;
-        setNative(target, value);
-        press(target, 'Enter');
-        target.dispatchEvent(new Event('blur', { bubbles: true }));
-        ok(label, ctl);
+
+      steps.push(function (next) {
+        if (!ctl) { next(); return; }
+
+        function attempt(target) {
+          setNative(target, value);
+          press(target, 'Enter');
+        }
+
+        attempt(ctl);
+        waitFor(function () { return holdsValue(ctl, value) ? 'ya' : null; }, function (first) {
+          if (first) { ok(label, ctl); next(); return; }
+
+          var fresh = newInputs(before);
+          for (var i = 0; i < fresh.length; i++) attempt(fresh[i]);
+
+          waitFor(function () { return holdsValue(ctl, value) ? 'ya' : null; }, function (second) {
+            if (second) ok(label, ctl);
+            else failed.push(label + ' (nilai tidak masuk, sudah dicoba di field dan di popup)');
+            next();
+          }, 8);
+        }, 8);
       });
     }
 
@@ -429,6 +584,19 @@ export const AUTOFILL_SCRIPT = `(function () {
       pickerSteps('Jam Mulai', data.jamMulai);
       pickerSteps('Jam Selesai', data.jamSelesai);
     }
+
+    /**
+     * Jangan tinggalkan form lebih buruk daripada saat ditemukan: centang
+     * "Gunakan jam" memunculkan DUA field wajib baru, jadi kalau jamnya gagal
+     * diisi, centang itu dikembalikan.
+     */
+    steps.push(function (next) {
+      if (wantJam && jamCheckbox && jamCheckbox.checked && !(filled('Jam Mulai') && filled('Jam Selesai'))) {
+        jamCheckbox.click();
+        notes.push('"Gunakan jam" dikembalikan tidak tercentang karena jamnya gagal diisi; kalau dibiarkan, KipApp menuntut dua field wajib yang kosong');
+      }
+      next();
+    });
 
     run(steps, function () { report(done, failed, notes); });
   }
@@ -462,7 +630,7 @@ export const AUTOFILL_SCRIPT = `(function () {
       out.innerHTML = '<b>Terisi:</b> ' + (done.length ? done.join(', ') : '\\u2014') +
         (failed.length ? '<br><b style="color:#b45309">Gagal:</b> ' + failed.join('; ') : '') +
         (notes.length ? '<br><b style="color:#b45309">Catatan:</b> ' + notes.join('; ') : '') +
-        '<br><span style="color:#475569">Periksa isian lalu tekan Save sendiri.</span>';
+        '<br><span style="color:#475569">Yang tertulis di atas sudah diperiksa ulang, bukan sekadar dicoba. Tekan Save sendiri.</span>';
     });
   };
   panel.querySelector('#kiplog-in').focus();

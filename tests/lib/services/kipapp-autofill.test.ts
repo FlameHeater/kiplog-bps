@@ -136,9 +136,15 @@ function renderFakeKipAppDialog(): void {
     'Terlaksananya Kegiatan Statistik Jasa sesuai SOP dan tepat waktu',
   ];
 
-  // Combobox RK: buka daftar saat diklik, saring saat diketik, pilih saat opsi diklik.
+  // Combobox RK. Daftarnya di-portal ke <body>, seperti komponen sungguhan —
+  // bukan sebagai tetangga field-nya. Ini penting: kalau daftarnya bersarang
+  // di dekat kontrol, pemeriksaan "sudah terpilih" bisa lolos hanya karena
+  // teks opsi kebetulan ada di sekitar kontrol.
   const rk = document.querySelector<HTMLInputElement>('#f-rk')!;
-  const rkPop = document.querySelector<HTMLDivElement>('#rk-pop')!;
+  const rkPop = document.createElement('div');
+  rkPop.id = 'rk-portal';
+  document.body.appendChild(rkPop);
+
   function renderOptions() {
     const query = rk.value.trim().toLowerCase();
     rkPop.innerHTML = RK_OPTIONS.filter((o) => o.toLowerCase().includes(query))
@@ -159,16 +165,29 @@ function renderFakeKipAppDialog(): void {
     renderOptions();
   });
 
-  // Kalender: klik membuka popup berisi kotak isian sendiri; Enter mengunci nilainya.
+  // Kalender: klik membuka popup berisi kotak isian SENDIRI, di-portal ke
+  // <body>. Field aslinya MENOLAK diketik langsung — persis kelakuan yang
+  // membuat percobaan pengguna gagal, dan yang memaksa skrip mencoba popup.
   const date = document.querySelector<HTMLInputElement>('#f-date')!;
-  const datePop = document.querySelector<HTMLDivElement>('#date-pop')!;
+  const datePop = document.createElement('div');
+  datePop.id = 'date-portal';
+  document.body.appendChild(datePop);
+
+  date.addEventListener('input', () => {
+    // Nilai yang diketik langsung ke pemicunya dibuang.
+    date.value = '';
+  });
   date.addEventListener('mousedown', () => {
     datePop.innerHTML =
       '<input id="date-inner" type="text" value="" /><div class="grid">1 2 3</div>';
     const inner = document.querySelector<HTMLInputElement>('#date-inner')!;
     inner.addEventListener('keydown', (e) => {
       if ((e as KeyboardEvent).key !== 'Enter') return;
-      date.value = inner.value;
+      date.setAttribute('data-committed', inner.value);
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        date,
+        inner.value
+      );
       datePop.innerHTML = '';
     });
   });
@@ -286,6 +305,43 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     expect(document.querySelector<HTMLInputElement>('#f-range')!.checked).toBe(false);
   });
 
+  it('mengembalikan centang "Gunakan jam" saat jamnya gagal diisi', () => {
+    // Field jam di tiruan ini menolak diisi, seperti pemilih jam yang tidak
+    // dikenali. Membiarkan centangnya menyala akan meninggalkan DUA field
+    // wajib kosong — form jadi lebih buruk daripada sebelum autofill.
+    const slot = document.querySelector<HTMLDivElement>('#jam-slot')!;
+    const useJam = document.querySelector<HTMLInputElement>('#f-usejam')!;
+    useJam.addEventListener('change', () => {
+      if (!useJam.checked) return;
+      slot.innerHTML =
+        '<div class="row"><label><i>*</i> Jam Mulai:</label><input id="f-start" type="text" readonly /></div>' +
+        '<div class="row"><label><i>*</i> Jam Selesai:</label><input id="f-end" type="text" readonly /></div>';
+    });
+
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    const out = document.querySelector('#kiplog-out')!.textContent!;
+    expect(useJam.checked).toBe(false);
+    expect(out).toContain('dikembalikan tidak tercentang');
+  });
+
+  it('tidak mengaku berhasil untuk field yang nilainya tidak benar-benar masuk', () => {
+    // Tanggal di tiruan ini menolak nilai dari mana pun.
+    const date = document.querySelector<HTMLInputElement>('#f-date')!;
+    const replacement = date.cloneNode(true) as HTMLInputElement;
+    date.replaceWith(replacement);
+    replacement.addEventListener('input', () => {
+      replacement.value = '';
+    });
+
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    const out = document.querySelector('#kiplog-out')!.textContent!;
+    expect(out).toContain('Tanggal');
+    expect(out).toContain('nilai tidak masuk');
+    expect(out.split('Gagal:')[0]).not.toContain('Tanggal');
+  });
+
   it('TIDAK menekan Save', () => {
     const onSave = vi.fn();
     document.querySelector('#f-save')!.addEventListener('click', onSave);
@@ -298,7 +354,7 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, missing)));
     const out = document.querySelector('#kiplog-out')!.textContent!;
     expect(out).toContain('Rencana Kinerja');
-    expect(out).toContain('tidak ditemukan');
+    expect(out).toContain('tidak muncul di daftar');
     expect(document.querySelector('#f-rk')!.getAttribute('data-selected')).toBeNull();
   });
 
