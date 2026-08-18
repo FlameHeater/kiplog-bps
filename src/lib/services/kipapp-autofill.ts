@@ -646,6 +646,16 @@ export const AUTOFILL_SCRIPT = `(function () {
       '</div>' +
       '<button id="kiplog-nextday" style="width:100%;margin-top:6px;padding:6px;border:1px solid #cbd5e1;' +
       'border-radius:6px;background:#fff;cursor:pointer">Lompat ke tanggal berikutnya &raquo;</button>' +
+      '<div style="display:flex;gap:6px;align-items:center;margin-top:8px">' +
+        '<label for="kiplog-limit" style="color:#475569;white-space:nowrap">Sekali jalan</label>' +
+        '<select id="kiplog-limit" style="flex:1;padding:5px;border:1px solid #cbd5e1;border-radius:6px;background:#fff">' +
+          '<option value="10">10 kegiatan</option>' +
+          '<option value="20">20 kegiatan</option>' +
+          '<option value="30">30 kegiatan</option>' +
+          '<option value="40">40 kegiatan</option>' +
+          '<option value="all">semua</option>' +
+        '</select>' +
+      '</div>' +
       '<button id="kiplog-auto" style="width:100%;margin-top:6px;padding:8px;border:0;border-radius:6px;' +
       'background:#b45309;color:#fff;font-weight:600;cursor:pointer">Jalankan otomatis (menekan Save sendiri)</button>' +
       '<button id="kiplog-abort" style="display:none;width:100%;margin-top:6px;padding:8px;border:0;' +
@@ -855,6 +865,7 @@ export const AUTOFILL_SCRIPT = `(function () {
 
   function renderQueue() {
     if (!queue) return;
+    updateAutoLabel();
     var item = queue.items[queue.index];
     var days = dayNumbers(queue.items, queue.index);
     panel.querySelector('#kiplog-progress').textContent =
@@ -872,6 +883,7 @@ export const AUTOFILL_SCRIPT = `(function () {
     panel.querySelector('#kiplog-in').style.display = 'none';
     panel.querySelector('#kiplog-go').style.display = 'none';
     panel.querySelector('#kiplog-queue').style.display = 'block';
+    loadLimit();
     renderQueue();
     hint(queue.index > 0
       ? 'Dilanjutkan dari posisi terakhir. Tekan Add di KipApp, lalu Isi Form.'
@@ -934,8 +946,45 @@ export const AUTOFILL_SCRIPT = `(function () {
    */
   var AUTO_DELAY = 1500;
   var SAVED_KEY = 'kiplog-autofill-saved';
+  var LIMIT_KEY = 'kiplog-autofill-limit';
   var autoRunning = false;
   var autoAbort = false;
+  var autoRemaining = 0;
+  var autoSavedCount = 0;
+
+  /**
+   * Berapa kegiatan yang dijalankan sekali tekan.
+   *
+   * Antrean sebulan bisa dua puluhan entri; menjalankan semuanya sekaligus
+   * berarti dua puluhan simpanan ke sistem resmi sebelum ada kesempatan
+   * memeriksa hasilnya. Membatasinya per sepuluh memberi titik henti alami
+   * untuk membuka daftar Pelaksanaan dan memastikan yang masuk benar.
+   */
+  function limitSelect() {
+    return panel.querySelector('#kiplog-limit');
+  }
+
+  function currentLimit() {
+    var value = limitSelect().value;
+    return value === 'all' ? Infinity : Number(value);
+  }
+
+  function loadLimit() {
+    try {
+      var saved = localStorage.getItem(LIMIT_KEY);
+      if (saved) limitSelect().value = saved;
+    } catch (e) { /* diabaikan */ }
+    updateAutoLabel();
+  }
+
+  function updateAutoLabel() {
+    var limit = currentLimit();
+    var left = queue ? queue.items.length - queue.index : 0;
+    var count = Math.min(limit, left);
+    panel.querySelector('#kiplog-auto').textContent =
+      'Jalankan otomatis (' + (limit === Infinity ? 'semua sisa' : count) +
+      ' kegiatan, menekan Save sendiri)';
+  }
 
   function itemSignature(item) {
     return item.tanggal + '|' + item.kegiatan;
@@ -1015,8 +1064,22 @@ export const AUTOFILL_SCRIPT = `(function () {
     if (!queue || autoRunning) return;
     autoRunning = true;
     autoAbort = false;
+    autoRemaining = currentLimit();
+    autoSavedCount = 0;
+    try { localStorage.setItem(LIMIT_KEY, limitSelect().value); } catch (e) { /* diabaikan */ }
     setAutoUI(true);
     autoStep();
+  }
+
+  /** Jeda karena batas tercapai — berbeda dari selesai maupun gagal. */
+  function autoPause() {
+    autoRunning = false;
+    setAutoUI(false);
+    updateAutoLabel();
+    var left = queue.items.length - queue.index;
+    out.innerHTML = '<b>Berhenti setelah ' + autoSavedCount + ' kegiatan.</b><br>' +
+      '<span style="color:#475569">Sisa ' + left + ' kegiatan. Periksa daftar Pelaksanaan di ' +
+      'KipApp dulu, lalu tekan Jalankan otomatis lagi untuk melanjutkan.</span>';
   }
 
   function autoStep() {
@@ -1074,6 +1137,8 @@ export const AUTOFILL_SCRIPT = `(function () {
         return;
       }
       markSaved(item);
+      autoSavedCount++;
+      autoRemaining--;
       autoAdvance();
     }, 40);
   }
@@ -1084,10 +1149,17 @@ export const AUTOFILL_SCRIPT = `(function () {
     queue.index++;
     saveProgress();
     renderQueue();
+    // Batas diperiksa SESUDAH maju, supaya panel berhenti sambil menunjuk
+    // kegiatan berikutnya yang belum dikerjakan — bukan yang barusan selesai.
+    if (autoRemaining <= 0) { autoPause(); return; }
     setTimeout(autoStep, AUTO_DELAY);
   }
 
   panel.querySelector('#kiplog-auto').onclick = autoStart;
+  limitSelect().onchange = function () {
+    try { localStorage.setItem(LIMIT_KEY, limitSelect().value); } catch (e) { /* diabaikan */ }
+    updateAutoLabel();
+  };
   panel.querySelector('#kiplog-abort').onclick = function () {
     autoAbort = true;
     autoRunning = false;

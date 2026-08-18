@@ -759,6 +759,86 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     );
   });
 
+  /** Antrean panjang, untuk menguji batas jumlah sekali jalan. */
+  function longBatch(count: number) {
+    const items = Array.from({ length: count }, (_, i) =>
+      // Tanggal berbeda tiap kegiatan supaya urutannya pasti dan mudah dibaca.
+      ({
+        ...activity,
+        date: `2026-08-${String(i + 1).padStart(2, '0')}`,
+        description: `Kegiatan ${i + 1}`,
+      })
+    );
+    return buildAutofillBatch(items, new Map([[plan.id, plan]])).batch;
+  }
+
+  it('berhenti setelah jumlah yang dipilih, bukan menghabiskan seluruh antrean', () => {
+    // Dua puluhan simpanan sekaligus ke sistem resmi tanpa jeda memeriksa
+    // adalah hal yang justru ingin dihindari pemilik proyek.
+    const kipapp = wireSaveAndAdd();
+    runBookmarklet(serializeAutofillBatch(longBatch(12)));
+    (document.querySelector('#kiplog-limit') as HTMLSelectElement).value = '10';
+    document.querySelector<HTMLButtonElement>('#kiplog-auto')!.click();
+    vi.runAllTimers();
+
+    expect(kipapp.saved).toHaveLength(10);
+    const out = document.querySelector('#kiplog-out')!.textContent!;
+    expect(out).toContain('Berhenti setelah 10 kegiatan');
+    expect(out).toContain('Sisa 2');
+  });
+
+  it('melanjutkan sisa antrean saat dijalankan lagi, tanpa mengulang yang sudah tersimpan', () => {
+    const kipapp = wireSaveAndAdd();
+    runBookmarklet(serializeAutofillBatch(longBatch(12)));
+    (document.querySelector('#kiplog-limit') as HTMLSelectElement).value = '10';
+    document.querySelector<HTMLButtonElement>('#kiplog-auto')!.click();
+    vi.runAllTimers();
+
+    document.querySelector<HTMLButtonElement>('#kiplog-auto')!.click();
+    vi.runAllTimers();
+
+    expect(kipapp.saved).toHaveLength(12);
+    expect(kipapp.saved[10]).toBe('Kegiatan 11');
+    expect(kipapp.saved[11]).toBe('Kegiatan 12');
+    expect(document.querySelector('#kiplog-out')!.textContent).toContain('Antrean selesai');
+  });
+
+  it('menjalankan seluruh sisa saat dipilih "semua"', () => {
+    const kipapp = wireSaveAndAdd();
+    runBookmarklet(serializeAutofillBatch(longBatch(12)));
+    (document.querySelector('#kiplog-limit') as HTMLSelectElement).value = 'all';
+    document.querySelector<HTMLButtonElement>('#kiplog-auto')!.click();
+    vi.runAllTimers();
+
+    expect(kipapp.saved).toHaveLength(12);
+  });
+
+  it('berhenti sambil menunjuk kegiatan berikutnya yang belum dikerjakan', () => {
+    // Kalau panel berhenti sambil menunjuk kegiatan yang barusan selesai,
+    // menekan lanjut akan menyimpannya dua kali.
+    wireSaveAndAdd();
+    runBookmarklet(serializeAutofillBatch(longBatch(12)));
+    (document.querySelector('#kiplog-limit') as HTMLSelectElement).value = '10';
+    document.querySelector<HTMLButtonElement>('#kiplog-auto')!.click();
+    vi.runAllTimers();
+
+    expect(document.querySelector('#kiplog-progress')!.textContent).toContain(
+      'Kegiatan 11 dari 12'
+    );
+  });
+
+  it('mengingat pilihan jumlah untuk pemakaian berikutnya', () => {
+    runBookmarklet(serializeAutofillBatch(longBatch(12)));
+    const select = document.querySelector('#kiplog-limit') as HTMLSelectElement;
+    select.value = '30';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+
+    document.getElementById('kiplog-autofill-panel')!.remove();
+    runBookmarklet(serializeAutofillBatch(longBatch(12)));
+
+    expect((document.querySelector('#kiplog-limit') as HTMLSelectElement).value).toBe('30');
+  });
+
   it('TIDAK menekan Save', () => {
     const onSave = vi.fn();
     document.querySelector('#f-save')!.addEventListener('click', onSave);

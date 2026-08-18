@@ -118,6 +118,12 @@ export function AutofillSetupCard() {
               </li>
               <li>Field yang gagal ditemukan dilaporkan di kotak itu, bukan didiamkan.</li>
               <li>
+                Mode otomatis menekan Save sendiri sampai jumlah yang Anda pilih (10/20/30/40 atau
+                semua) tercapai, lalu berhenti supaya hasilnya bisa diperiksa dulu. Ia berhenti
+                total pada kegagalan pertama, dan tidak pernah menyimpan kegiatan yang sama dua
+                kali.
+              </li>
+              <li>
                 Panel bisa digeser lewat judulnya dan diubah ukurannya dari sudut kanan bawah;
                 posisinya diingat. Klik ganda judulnya untuk mengembalikannya ke sudut.
               </li>
