@@ -350,6 +350,7 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
   beforeEach(() => {
     vi.useFakeTimers();
     stubVisibility();
+    localStorage.clear();
     renderFakeKipAppDialog();
   });
 
@@ -519,6 +520,108 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     runBookmarklet(JSON.stringify({ kiplogAutofill: 2, items: [] }));
     expect(document.querySelector('#kiplog-out')!.textContent).toContain('Antrean kosong');
     expect(document.querySelector<HTMLElement>('#kiplog-queue')!.style.display).toBe('none');
+  });
+
+  it('memindahkan panel saat header digeser', () => {
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    const panel = document.getElementById('kiplog-autofill-panel')!;
+    const head = document.getElementById('kiplog-head')!;
+
+    head.dispatchEvent(new MouseEvent('mousedown', { clientX: 100, clientY: 100, bubbles: true }));
+    document.dispatchEvent(
+      new MouseEvent('mousemove', { clientX: 260, clientY: 180, bubbles: true })
+    );
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    // Titik pegangan dipertahankan: panel bergeser sejauh kursor bergerak
+    // (+160, +80), bukan melompat supaya sudutnya menempel ke kursor.
+    expect(panel.style.left).toBe('160px');
+    expect(panel.style.top).toBe('80px');
+    // Sudut penambat lama harus dilepas, kalau tidak panel tertarik dua arah.
+    expect(panel.style.right).toBe('auto');
+    expect(panel.style.bottom).toBe('auto');
+  });
+
+  it('tidak membiarkan panel digeser keluar layar', () => {
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    const panel = document.getElementById('kiplog-autofill-panel')!;
+    const head = document.getElementById('kiplog-head')!;
+
+    head.dispatchEvent(new MouseEvent('mousedown', { clientX: 0, clientY: 0, bubbles: true }));
+    document.dispatchEvent(
+      new MouseEvent('mousemove', { clientX: -500, clientY: -500, bubbles: true })
+    );
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+    expect(panel.style.left).toBe('0px');
+    expect(panel.style.top).toBe('0px');
+  });
+
+  it('tidak ikut menggeser saat tombol tutup yang ditekan', () => {
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    const panel = document.getElementById('kiplog-autofill-panel')!;
+    const close = document.getElementById('kiplog-x')!;
+
+    close.dispatchEvent(new MouseEvent('mousedown', { clientX: 50, clientY: 50, bubbles: true }));
+    document.dispatchEvent(
+      new MouseEvent('mousemove', { clientX: 400, clientY: 400, bubbles: true })
+    );
+
+    expect(panel.style.left).toBe('');
+  });
+
+  it('mengingat posisi panel untuk pemakaian berikutnya', () => {
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    const head = document.getElementById('kiplog-head')!;
+    head.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: 10, bubbles: true }));
+    document.dispatchEvent(
+      new MouseEvent('mousemove', { clientX: 300, clientY: 220, bubbles: true })
+    );
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+    document.getElementById('kiplog-autofill-panel')!.remove();
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    const panel = document.getElementById('kiplog-autofill-panel')!;
+    expect(panel.style.left).toBe('290px');
+    expect(panel.style.top).toBe('210px');
+  });
+
+  it('mengembalikan panel ke sudut saat header diklik ganda', () => {
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    const panel = document.getElementById('kiplog-autofill-panel')!;
+    const head = document.getElementById('kiplog-head')!;
+
+    head.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: 10, bubbles: true }));
+    document.dispatchEvent(
+      new MouseEvent('mousemove', { clientX: 300, clientY: 220, bubbles: true })
+    );
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    head.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+
+    expect(panel.style.right).toBe('16px');
+    expect(panel.style.bottom).toBe('16px');
+    expect(panel.style.left).toBe('auto');
+  });
+
+  it('menjepit posisi tersimpan ke dalam layar yang lebih kecil', () => {
+    // Posisi dari layar besar tidak boleh membuat panel hilang di layar kecil.
+    localStorage.setItem(
+      'kiplog-autofill-geometry',
+      JSON.stringify({ left: 5000, top: 4000, width: 340, height: 300 })
+    );
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    const panel = document.getElementById('kiplog-autofill-panel')!;
+    expect(Number.parseInt(panel.style.left, 10)).toBeLessThanOrEqual(window.innerWidth);
+    expect(Number.parseInt(panel.style.top, 10)).toBeLessThanOrEqual(window.innerHeight);
+  });
+
+  it('bisa diubah ukurannya lewat pegangan bawaan browser', () => {
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    const panel = document.getElementById('kiplog-autofill-panel')!;
+    // overflow wajib menyertai resize; tanpa itu resize:both tidak berlaku.
+    expect(panel.style.resize).toBe('both');
+    expect(panel.style.overflow).toBe('auto');
   });
 
   it('TIDAK menekan Save', () => {

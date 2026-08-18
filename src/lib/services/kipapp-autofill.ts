@@ -599,11 +599,17 @@ export const AUTOFILL_SCRIPT = `(function () {
 
   var panel = document.createElement('div');
   panel.id = PANEL_ID;
+  // resize:both memberi pegangan ubah-ukuran bawaan browser, jadi tidak perlu
+  // menggambar sudut penarik sendiri. overflow:auto wajib menyertainya —
+  // tanpa itu resize:both tidak berlaku sama sekali.
   panel.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;width:340px;' +
+    'max-height:80vh;min-width:260px;min-height:150px;resize:both;overflow:auto;' +
     'background:#fff;color:#0f172a;border:1px solid #cbd5e1;border-radius:10px;padding:12px;' +
     'box-shadow:0 8px 24px rgba(2,6,23,.18);font:13px/1.45 system-ui,sans-serif';
   panel.innerHTML =
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+    '<div id="kiplog-head" title="Geser untuk memindahkan \u00b7 klik ganda untuk mengembalikan ke sudut" ' +
+    'style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;' +
+    'cursor:move;user-select:none">' +
     '<b>KipLog autofill</b><button id="kiplog-x" style="border:0;background:none;font-size:16px;cursor:pointer">&times;</button></div>' +
     '<p style="margin:0 0 6px;color:#475569">Tempel data dari KipLog, lalu Isi Form. ' +
     'Skrip ini <b>tidak menekan Save</b> \\u2014 periksa dulu, simpan sendiri.</p>' +
@@ -631,6 +637,107 @@ export const AUTOFILL_SCRIPT = `(function () {
     '</div>' +
     '<div id="kiplog-out" style="margin-top:8px;white-space:pre-wrap"></div>';
   document.body.appendChild(panel);
+
+  /**
+   * Panel bisa dipindahkan dan diubah ukurannya.
+   *
+   * Bukan kemewahan: panel ini menempel di sudut kanan bawah, dan di sanalah
+   * tombol Save serta isi dialog KipApp berada saat halaman digulir. Selama
+   * antrean sebulan dikerjakan, panel yang tidak bisa digeser akan menghalangi
+   * bagian form yang justru sedang diperiksa.
+   *
+   * Posisi dan ukuran diingat karena antrean sebulan dikerjakan berkali-kali:
+   * memindahkannya sekali seharusnya cukup untuk seterusnya.
+   */
+  var GEOM_KEY = 'kiplog-autofill-geometry';
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), Math.max(min, max));
+  }
+
+  /**
+   * Angka gaya yang kita setel sendiri lebih dipercaya daripada hasil
+   * pengukuran tata letak: itulah nilai yang persis diminta pengguna saat
+   * menggeser, tanpa pembulatan atau pengaruh transform induk.
+   */
+  function styleNumber(value, fallback) {
+    var parsed = parseFloat(value);
+    return isNaN(parsed) ? fallback : parsed;
+  }
+
+  function saveGeometry() {
+    try {
+      localStorage.setItem(GEOM_KEY, JSON.stringify({
+        left: styleNumber(panel.style.left, panel.offsetLeft),
+        top: styleNumber(panel.style.top, panel.offsetTop),
+        width: styleNumber(panel.style.width, panel.offsetWidth),
+        height: styleNumber(panel.style.height, panel.offsetHeight)
+      }));
+    } catch (e) { /* penyimpanan diblokir: panel tetap bisa digeser, hanya tidak diingat */ }
+  }
+
+  function applyGeometry() {
+    var saved = null;
+    try {
+      var raw = localStorage.getItem(GEOM_KEY);
+      saved = raw ? JSON.parse(raw) : null;
+    } catch (e) { saved = null; }
+    if (!saved) return;
+
+    // Dijepit ke dalam layar: jendela bisa saja lebih kecil daripada saat
+    // posisi itu disimpan, dan panel yang tersimpan di luar layar sama saja
+    // dengan panel yang hilang.
+    var width = clamp(saved.width || 340, 260, window.innerWidth - 20);
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.style.width = width + 'px';
+    if (saved.height) panel.style.height = clamp(saved.height, 150, window.innerHeight - 20) + 'px';
+    panel.style.left = clamp(saved.left || 0, 0, window.innerWidth - width) + 'px';
+    panel.style.top = clamp(saved.top || 0, 0, window.innerHeight - 60) + 'px';
+  }
+
+  function resetGeometry() {
+    try { localStorage.removeItem(GEOM_KEY); } catch (e) { /* diabaikan */ }
+    panel.style.left = 'auto';
+    panel.style.top = 'auto';
+    panel.style.right = '16px';
+    panel.style.bottom = '16px';
+    panel.style.width = '340px';
+    panel.style.height = '';
+  }
+
+  var head = panel.querySelector('#kiplog-head');
+  head.addEventListener('mousedown', function (event) {
+    if (event.target && event.target.id === 'kiplog-x') return;
+    event.preventDefault();
+    var rect = panel.getBoundingClientRect();
+    var grabX = event.clientX - rect.left;
+    var grabY = event.clientY - rect.top;
+
+    function onMove(moveEvent) {
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+      panel.style.left = clamp(moveEvent.clientX - grabX, 0, window.innerWidth - panel.offsetWidth) + 'px';
+      panel.style.top = clamp(moveEvent.clientY - grabY, 0, window.innerHeight - 40) + 'px';
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      saveGeometry();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  head.addEventListener('dblclick', resetGeometry);
+
+  // Ukuran diubah lewat pegangan bawaan browser, yang tidak memancarkan event
+  // tersendiri; ResizeObserver yang menangkapnya. Bila tidak tersedia, ukuran
+  // tetap bisa diubah, hanya tidak diingat.
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(function () { saveGeometry(); }).observe(panel);
+  }
+
+  applyGeometry();
 
   var out = panel.querySelector('#kiplog-out');
   panel.querySelector('#kiplog-x').onclick = function () { panel.remove(); };

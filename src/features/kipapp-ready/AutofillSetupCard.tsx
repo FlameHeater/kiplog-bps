@@ -117,6 +117,10 @@ export function AutofillSetupCard() {
                 pemeriksaan akhir tetap milik Anda.
               </li>
               <li>Field yang gagal ditemukan dilaporkan di kotak itu, bukan didiamkan.</li>
+              <li>
+                Panel bisa digeser lewat judulnya dan diubah ukurannya dari sudut kanan bawah;
+                posisinya diingat. Klik ganda judulnya untuk mengembalikannya ke sudut.
+              </li>
               <li>Tidak ada kredensial KipApp yang diminta atau disimpan.</li>
             </ul>
           </div>
