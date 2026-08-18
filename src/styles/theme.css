@@ -72,6 +72,22 @@
     --warning: 32 95% 34%; /* #a95c04 */
     --info: 199 89% 41%; /* #0284c7 */
 
+    /*
+     * Warna status kegiatan, ditetapkan pemilik proyek.
+     *
+     * Nilai lightness-nya dipilih supaya teks berwarna ini tetap terbaca di
+     * atas latar terang (NFR-09, WCAG AA 4.5:1) — kuning dan hijau muda murni
+     * gagal telak di situ, jadi keduanya digelapkan secukupnya sambil tetap
+     * dikenali sebagai kuning dan hijau muda. Latar kartu memakai token yang
+     * sama dengan opasitas rendah, sehingga rona kartu dan warna teksnya tidak
+     * pernah bergeser satu sama lain.
+     */
+    --status-draft: 45 93% 30%; /* kuning */
+    --status-complete: 120 45% 34%; /* hijau muda */
+    --status-ready: 152 72% 21%; /* hijau tua */
+    --status-reported: 25 90% 38%; /* oranye */
+    --status-archived: 215 15% 42%; /* abu-abu */
+
     --border: 214 32% 91%;
     --input: 214 32% 91%;
     --ring: 222 47% 11%;
@@ -160,6 +176,14 @@
     --success: 142 64% 45%;
     --warning: 32 90% 55%;
     --info: 199 80% 55%;
+
+    /* Di latar gelap yang dibutuhkan sebaliknya: warna dinaikkan lightness-nya
+       supaya kontrasnya terhadap latar tetap tinggi. */
+    --status-draft: 45 95% 62%;
+    --status-complete: 120 50% 62%;
+    --status-ready: 152 55% 52%;
+    --status-reported: 25 95% 62%;
+    --status-archived: 215 15% 65%;
 
     --border: 217 33% 20%;
     --input: 217 33% 20%;
