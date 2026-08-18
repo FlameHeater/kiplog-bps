@@ -839,6 +839,93 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     expect((document.querySelector('#kiplog-limit') as HTMLSelectElement).value).toBe('30');
   });
 
+  function setInputValue(input: HTMLInputElement, value: string) {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+  }
+
+  /**
+   * Kalender yang HANYA menerima Enter ber-keyCode, seperti Ant Design v1 yang
+   * memeriksa `event.keyCode` dan mengabaikan `event.key`. Inilah yang membuat
+   * antrean pengguna berhenti di kegiatan ke-5 dengan kalender terbuka dan
+   * tanggal sudah terketik tapi tidak pernah masuk.
+   */
+  function wireDatePopupRequiringKeyCode() {
+    const trigger = document.querySelector<HTMLInputElement>('.ant-calendar-picker-input')!;
+    const popup = document.getElementById('date-portal')!;
+    trigger.addEventListener('mousedown', () => {
+      popup.innerHTML = '<div class="ant-calendar"><input class="ant-calendar-input" /></div>';
+      const inner = popup.querySelector<HTMLInputElement>('.ant-calendar-input')!;
+      inner.addEventListener('keydown', (event) => {
+        if ((event as KeyboardEvent).keyCode !== 13) return;
+        setInputValue(trigger, inner.value);
+        popup.innerHTML = '';
+      });
+    });
+  }
+
+  /** Kalender yang mengabaikan Enter sepenuhnya: nilai hanya masuk lewat grid. */
+  function wireDatePopupGridOnly() {
+    const trigger = document.querySelector<HTMLInputElement>('.ant-calendar-picker-input')!;
+    const popup = document.getElementById('date-portal')!;
+    trigger.addEventListener('mousedown', () => {
+      popup.innerHTML =
+        '<div class="ant-calendar"><input class="ant-calendar-input" /><table><tbody><tr>' +
+        // Sel bulan lalu dengan angka yang SAMA, ditaruh lebih dulu sebagai
+        // jebakan: memilihnya berarti salah tanggal.
+        '<td class="ant-calendar-cell ant-calendar-last-month-cell"><div class="ant-calendar-date">17</div></td>' +
+        '<td class="ant-calendar-cell"><div class="ant-calendar-date">17</div></td>' +
+        '</tr></tbody></table></div>';
+      const inner = popup.querySelector<HTMLInputElement>('.ant-calendar-input')!;
+      for (const cell of Array.from(popup.querySelectorAll<HTMLElement>('.ant-calendar-cell'))) {
+        if (cell.className.includes('last-month')) continue;
+        cell.querySelector('.ant-calendar-date')!.addEventListener('click', () => {
+          setInputValue(trigger, inner.value);
+          popup.innerHTML = '';
+        });
+      }
+    });
+  }
+
+  it('mengunci tanggal lewat Enter yang membawa keyCode, bukan key saja', () => {
+    wireDatePopupRequiringKeyCode();
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    expect(dateValue()).toBe('2026-08-17');
+  });
+
+  it('mengklik tanggal di grid kalender saat Enter tidak menguncinya', () => {
+    wireDatePopupGridOnly();
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    expect(dateValue()).toBe('2026-08-17');
+  });
+
+  it('melewati sel bulan lain yang angkanya kebetulan sama', () => {
+    // Sel jebakan dipasang lebih dulu di grid; kalau ia yang terklik, nilainya
+    // tidak akan pernah masuk karena sel itu tidak memasang handler.
+    wireDatePopupGridOnly();
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    expect(dateValue()).toBe('2026-08-17');
+  });
+
+  it('menutup popup dan melaporkan gagal saat tanggal tidak bisa dikunci sama sekali', () => {
+    const trigger = document.querySelector<HTMLInputElement>('.ant-calendar-picker-input')!;
+    const popup = document.getElementById('date-portal')!;
+    let escaped = false;
+    trigger.addEventListener('mousedown', () => {
+      popup.innerHTML = '<div class="ant-calendar"><input class="ant-calendar-input" /></div>';
+      popup.querySelector('.ant-calendar-input')!.addEventListener('keydown', (event) => {
+        if ((event as KeyboardEvent).key === 'Escape') escaped = true;
+      });
+    });
+
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    const out = document.querySelector('#kiplog-out')!.textContent!;
+    expect(out).toContain('Tanggal');
+    expect(out.split('Gagal:')[0]).not.toContain('Tanggal');
+    // Popup yang dibiarkan terbuka akan menghalangi field berikutnya.
+    expect(escaped).toBe(true);
+  });
+
   it('TIDAK menekan Save', () => {
     const onSave = vi.fn();
     document.querySelector('#f-save')!.addEventListener('click', onSave);

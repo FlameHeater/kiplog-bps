@@ -353,9 +353,55 @@ export const AUTOFILL_SCRIPT = `(function () {
     ctl.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  var KEY_CODES = { Enter: 13, Escape: 27 };
+
+  /**
+   * Tombol keyboard, LENGKAP dengan keyCode.
+   *
+   * Ant Design v1 memeriksa properti keyCode, bukan key — dan properti
+   * itu tidak terisi dari opsi konstruktor KeyboardEvent, jadi harus dipasang
+   * sendiri. Tanpa ini, Enter di kotak isian kalender tidak pernah terbaca dan
+   * tanggal yang sudah terketik tidak pernah masuk ke fieldnya.
+   */
   function press(el, key) {
-    el.dispatchEvent(new KeyboardEvent('keydown', { key: key, bubbles: true }));
-    el.dispatchEvent(new KeyboardEvent('keyup', { key: key, bubbles: true }));
+    var code = KEY_CODES[key] || 0;
+    ['keydown', 'keypress', 'keyup'].forEach(function (type) {
+      if (type === 'keypress' && key !== 'Enter') return;
+      var event = new KeyboardEvent(type, { key: key, bubbles: true, cancelable: true });
+      try {
+        Object.defineProperty(event, 'keyCode', { get: function () { return code; } });
+        Object.defineProperty(event, 'which', { get: function () { return code; } });
+      } catch (e) { /* sebagian mesin melarangnya; key saja yang tersisa */ }
+      el.dispatchEvent(event);
+    });
+  }
+
+  /**
+   * Mengklik tanggal di grid kalender.
+   *
+   * Ini yang dilakukan manusia, dan paling dipercaya komponennya. Mengetik ke
+   * kotak isian sudah membuat panel berpindah ke bulan yang benar (terlihat
+   * dari tanggalnya tersorot), jadi tinggal menekan selnya. Sel bulan
+   * sebelumnya/berikutnya yang ikut tampil di tepi grid dilewati supaya tidak
+   * salah pilih tanggal dengan angka sama.
+   */
+  function clickCalendarDay(value) {
+    var parts = String(value).split('-');
+    if (parts.length !== 3) return false;
+    var day = String(Number(parts[2]));
+    var cells = list('td');
+    for (var i = 0; i < cells.length; i++) {
+      var cell = cells[i];
+      if (inPanel(cell) || !visible(cell)) continue;
+      var cls = String(cell.className || '');
+      if (cls.indexOf('last-month') !== -1 || cls.indexOf('next-month') !== -1) continue;
+      if (cls.indexOf('disabled') !== -1) continue;
+      var dateEl = cell.querySelector('.ant-calendar-date') || cell;
+      if (norm(dateEl.textContent) !== day) continue;
+      tap(dateEl);
+      return true;
+    }
+    return false;
   }
 
   function tap(el) {
@@ -549,6 +595,7 @@ export const AUTOFILL_SCRIPT = `(function () {
      */
     function pickerSteps(label, value, triggerSelector, innerSelector) {
       var trigger = null;
+      var isDate = triggerSelector === ANT.dateTrigger;
 
       steps.push(function (next) {
         var row = rowFor(label);
@@ -580,12 +627,27 @@ export const AUTOFILL_SCRIPT = `(function () {
           }
           setNative(target, value);
           press(target, 'Enter');
-          waitFor(function () {
+
+          function committed() {
             return norm(trigger.value) === norm(value) ? 'ya' : null;
-          }, function (recorded) {
-            if (recorded) ok(label, trigger);
-            else failed.push(label + ' (nilai ditolak kotak isian di dalam popup)');
-            next();
+          }
+
+          waitFor(committed, function (first) {
+            if (first) { ok(label, trigger); next(); return; }
+
+            // Enter belum mengunci nilainya: klik tanggalnya di grid, seperti
+            // yang dilakukan manusia.
+            var clicked = isDate ? clickCalendarDay(value) : false;
+            waitFor(committed, function (second) {
+              if (second) { ok(label, trigger); next(); return; }
+              // Popup dibiarkan terbuka akan menghalangi field berikutnya,
+              // jadi ditutup dulu sebelum melaporkan gagal.
+              press(target, 'Escape');
+              failed.push(label + (clicked
+                ? ' (tanggal diklik di kalender tapi tidak tercatat)'
+                : ' (nilai ditolak kotak isian di dalam popup)'));
+              next();
+            }, 8);
           }, 8);
         });
       });
