@@ -451,17 +451,22 @@ export function ActivityForm({
       />
 
       {/*
-        Tombol simpan menempel di dasar dialog, bukan ikut tergulir bersama isi
-        form. Form ini panjang — sembilan field ditambah checklist — dan tombol
-        yang hanya bisa dijangkau setelah menggulir ke ujung bawah membuat
-        pekerjaan yang paling sering dilakukan (menyimpan) jadi yang paling
-        jauh dijangkau.
+        Bilah aksi yang menempel di dasar dialog.
 
-        `-mx-6 -mb-6 px-6 py-4` melebarkan bilahnya sampai tepi dialog supaya
-        isi form yang lewat di belakangnya benar-benar tertutup, bukan mengintip
-        di sisi kiri-kanan.
+        `-bottom-6`, bukan `bottom-0`: sticky menempel pada kotak PADDING wadah
+        bergulir, sedangkan dialog ini ber-padding 24px — dengan `bottom-0`
+        bilahnya berhenti 24px di atas tepi visual dan isi form terlihat
+        mengintip di bawahnya. Offset negatif sebesar padding itu yang membuatnya
+        benar-benar rapat ke dasar.
+
+        `-mx-6 px-6` melebarkannya sampai tepi kiri-kanan, `-mb-6` menutup sisa
+        padding bawah saat form sudah tergulir habis.
+
+        Latarnya sengaja dibedakan dari kartu dialog: bilah sewarna isi form
+        akan tampak seperti tombol yang mengambang di tengah konten, bukan
+        wilayah aksi tersendiri.
       */}
-      <div className="sticky bottom-0 -mx-6 -mb-6 flex gap-2 border-t border-border bg-card px-6 py-4">
+      <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 mt-2 flex gap-2 border-t border-border bg-muted/70 px-6 py-4 shadow-[0_-4px_12px_-8px_rgba(2,6,23,0.35)] backdrop-blur-sm">
         <Button type="submit" disabled={isSubmitting}>
           Simpan
         </Button>
