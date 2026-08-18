@@ -54,6 +54,7 @@ penyimpan sinkronisasi (lihat "Login & Sinkronisasi"). Detail lengkap di
 - **KipApp Ready**: mode salin dua kolom untuk memindahkan data ke KipApp, dengan penguncian periode, plus bookmarklet autofill (lihat di bawah).
 - **Backup & Import**: backup JSON/ZIP, restore (gabung/ganti), hapus semua data, dan rekonsiliasi Excel Pelaksanaan dari KipApp (lihat kolom mana yang sudah/belum tercatat di KipLog).
 - **Rencana Kinerja & Template**: 40 RK 2026 (seed), template kegiatan yang bisa dipakai ulang.
+- **Tampilan**: tema terang/gelap + 5 warna aksen, foto profil, logo unit kerja untuk kop PDF, logo aplikasi pengganti lambang sidebar, serta animasi masuk halaman dan saat digulir (mati sendiri bila sistem meminta kurangi gerak).
 - **Login & Sinkronisasi**: akses dibatasi ke akun Google yang diizinkan, data disinkronkan antar perangkat lewat satu folder Google Drive bersama.
 
 ## Login & Sinkronisasi

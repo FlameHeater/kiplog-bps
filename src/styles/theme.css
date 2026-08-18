@@ -174,7 +174,12 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-heading font-semibold tracking-tight;
   }
 }
@@ -207,5 +212,62 @@
     left: 0;
     top: 0;
     width: 100%;
+  }
+}
+
+/*
+ * Gerak.
+ *
+ * Semuanya hanya menganimasikan `opacity` dan `transform` — dua properti yang
+ * bisa dikerjakan compositor tanpa menghitung ulang tata letak. Menganimasikan
+ * tinggi atau posisi akan membuat halaman padat data seperti Kalender tersendat
+ * di perangkat kelas menengah.
+ *
+ * Seluruh blok ini tunduk pada guard `prefers-reduced-motion` yang sudah ada di
+ * berkas ini: pengguna yang mematikan animasi di sistemnya tidak mendapat
+ * gerakan apa pun, bukan gerakan yang dipercepat.
+ */
+@keyframes kiplog-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes kiplog-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-page {
+  animation: kiplog-page-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Elemen yang menunggu tergulir ke layar: disembunyikan dulu, lalu dimunculkan. */
+.reveal {
+  opacity: 0;
+}
+
+.reveal-visible {
+  animation: kiplog-reveal-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-page,
+  .reveal,
+  .reveal-visible {
+    animation: none;
+    opacity: 1;
+    transform: none;
   }
 }

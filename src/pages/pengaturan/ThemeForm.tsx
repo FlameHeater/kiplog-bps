@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils/cn';
 import { settingsRepository } from '@/db/repositories';
+import { ImagePickerField } from '@/components/common/ImagePickerField';
 import type { AppSettings } from '@/types';
 
 interface ThemeFormProps {
@@ -29,7 +30,9 @@ const ACCENT_OPTIONS = [
 // aksen tersimpan per-browser di AppSettings, sama seperti preferensi lain
 // di halaman ini (aplikasi ini tidak punya backend/server).
 export function ThemeForm({ initial }: ThemeFormProps) {
-  async function update(patch: Partial<Pick<AppSettings, 'theme' | 'accentColor'>>) {
+  async function update(
+    patch: Partial<Pick<AppSettings, 'theme' | 'accentColor' | 'appLogoDataUrl'>>
+  ) {
     const current = await settingsRepository.get();
     if (!current) return;
     await settingsRepository.save({ ...current, ...patch });
@@ -83,10 +86,22 @@ export function ThemeForm({ initial }: ThemeFormProps) {
                   accentColor === value ? 'ring-ring' : 'ring-transparent hover:ring-border'
                 )}
               >
-                <span className="h-8 w-8 rounded-full border border-black/10" style={{ backgroundColor: hex }} />
+                <span
+                  className="h-8 w-8 rounded-full border border-black/10"
+                  style={{ backgroundColor: hex }}
+                />
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="mt-6 border-t border-border pt-6">
+          <ImagePickerField
+            label="Logo aplikasi"
+            hint="Menggantikan lambang KipLog di sidebar. Kosongkan untuk memakai lambang bawaan."
+            value={initial?.appLogoDataUrl}
+            onChange={(dataUrl) => void update({ appLogoDataUrl: dataUrl })}
+          />
         </div>
       </CardContent>
     </Card>

@@ -8,13 +8,16 @@ import { useActivityModalStore } from '@/features/activities/activity-modal-stor
 import { MonthView } from '@/features/calendar/MonthView';
 import { DayPanel } from '@/features/calendar/DayPanel';
 import { AlertPanel } from '@/features/dashboard/AlertPanel';
+import { Reveal } from '@/components/common/Reveal';
 import { ActivityHeatmap } from '@/features/dashboard/ActivityHeatmap';
 import { WeeklyReviewCard } from '@/features/dashboard/WeeklyReviewCard';
 
 // recharts is large (~100KB+ gzip) — keep it out of the main bundle (NFR-02)
 // since the chart is a P1 nice-to-have, not needed for first paint.
 const RkDistributionChart = lazy(() =>
-  import('@/features/dashboard/RkDistributionChart').then((m) => ({ default: m.RkDistributionChart }))
+  import('@/features/dashboard/RkDistributionChart').then((m) => ({
+    default: m.RkDistributionChart,
+  }))
 );
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { usePerformancePlans } from '@/hooks/usePerformancePlans';
@@ -66,20 +69,34 @@ export function DashboardPage() {
 
   const stats = useMemo(() => {
     if (!activities || !plans) return null;
-    const periodActivities = activities.filter((a) => a.skpPeriod === skpPeriod && a.status !== 'archived');
+    const periodActivities = activities.filter(
+      (a) => a.skpPeriod === skpPeriod && a.status !== 'archived'
+    );
     const workdaysInMonth = getWorkdaysInMonth(year, month, config);
     // A past/future month has no meaningful "so far" — only the real current
     // month caps at today; any other selected month counts the whole month.
-    const workdaysUpToToday = getWorkdaysInMonth(year, month, config, isCurrentMonth ? today : undefined);
-    const filledWorkdays = countFilledWorkdays(workdaysUpToToday, periodActivities.map((a) => a.date));
+    const workdaysUpToToday = getWorkdaysInMonth(
+      year,
+      month,
+      config,
+      isCurrentMonth ? today : undefined
+    );
+    const filledWorkdays = countFilledWorkdays(
+      workdaysUpToToday,
+      periodActivities.map((a) => a.date)
+    );
     const coverage = calculateCoverage(filledWorkdays, workdaysUpToToday.length);
     const emptyWorkdays = workdaysUpToToday.length - filledWorkdays;
 
     const activePlans = plans.filter((p) => p.isActive);
-    const usedPlanIds = new Set(periodActivities.map((a) => a.performancePlanId).filter((id): id is string => !!id));
+    const usedPlanIds = new Set(
+      periodActivities.map((a) => a.performancePlanId).filter((id): id is string => !!id)
+    );
     const totalEvidence = periodActivities.reduce((sum, a) => sum + a.evidenceCount, 0);
     const avgProgress = periodActivities.length
-      ? Math.round(periodActivities.reduce((sum, a) => sum + a.progress, 0) / periodActivities.length)
+      ? Math.round(
+          periodActivities.reduce((sum, a) => sum + a.progress, 0) / periodActivities.length
+        )
       : 0;
 
     return {
@@ -102,7 +119,11 @@ export function DashboardPage() {
   const planById = useMemo(() => new Map((plans ?? []).map((p) => [p.id, p])), [plans]);
 
   const recentActivities = useMemo(
-    () => (activities ?? []).slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5),
+    () =>
+      (activities ?? [])
+        .slice()
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .slice(0, 5),
     [activities]
   );
 
@@ -149,20 +170,41 @@ export function DashboardPage() {
 
       {stats ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <StatTile label="Coverage" value={`${stats.coverage}%`} sub={`${stats.filledWorkdays}/${stats.workdaysUpToToday} hari kerja`} />
+          <StatTile
+            label="Coverage"
+            value={`${stats.coverage}%`}
+            sub={`${stats.filledWorkdays}/${stats.workdaysUpToToday} hari kerja`}
+          />
           <StatTile label="Hari Kerja" value={String(stats.workdaysInMonth)} sub="bulan ini" />
           <StatTile
             label="Hari Terisi"
             value={String(stats.filledWorkdays)}
             sub={isCurrentMonth ? 'hingga hari ini' : 'sebulan penuh'}
           />
-          <StatTile label="Hari Kosong" value={String(stats.emptyWorkdays)} warn={stats.emptyWorkdays > 0} />
+          <StatTile
+            label="Hari Kosong"
+            value={String(stats.emptyWorkdays)}
+            warn={stats.emptyWorkdays > 0}
+          />
           <StatTile label="Kegiatan" value={String(stats.totalActivities)} href="/kegiatan" />
           <StatTile label="Bukti Dukung" value={String(stats.totalEvidence)} />
-          <StatTile label="RK Terpakai" value={`${stats.rkUsed}/${stats.rkTotal}`} href="/rencana-kinerja" />
+          <StatTile
+            label="RK Terpakai"
+            value={`${stats.rkUsed}/${stats.rkTotal}`}
+            href="/rencana-kinerja"
+          />
           <StatTile label="Rata-rata Progress" value={String(stats.avgProgress)} />
-          <StatTile label="Draft" value={String(stats.draftCount)} href="/kegiatan?status=draft" warn={stats.draftCount > 0} />
-          <StatTile label="Siap Dilaporkan" value={String(stats.readyCount)} href="/kegiatan?status=ready_to_report" />
+          <StatTile
+            label="Draft"
+            value={String(stats.draftCount)}
+            href="/kegiatan?status=draft"
+            warn={stats.draftCount > 0}
+          />
+          <StatTile
+            label="Siap Dilaporkan"
+            value={String(stats.readyCount)}
+            href="/kegiatan?status=ready_to_report"
+          />
           <StatTile
             label="Belum Ada Tautan"
             value={String(stats.missingLinkCount)}
@@ -175,7 +217,9 @@ export function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Kalender {MONTH_NAMES_ID[month - 1]} {year}</CardTitle>
+            <CardTitle>
+              Kalender {MONTH_NAMES_ID[month - 1]} {year}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <MonthView
@@ -191,7 +235,9 @@ export function DashboardPage() {
 
         <div className="space-y-4">
           {selectedDate ? <DayPanel date={selectedDate} activities={dayActivities} /> : null}
-          <WeeklyReviewCard activities={activities ?? []} />
+          <Reveal>
+            <WeeklyReviewCard activities={activities ?? []} />
+          </Reveal>
         </div>
       </div>
 
@@ -211,7 +257,9 @@ export function DashboardPage() {
             <CardTitle>Aktivitas 12 Bulan Terakhir</CardTitle>
           </CardHeader>
           <CardContent>
-            <ActivityHeatmap activities={activities ?? []} />
+            <Reveal delayMs={80}>
+              <ActivityHeatmap activities={activities ?? []} />
+            </Reveal>
           </CardContent>
         </Card>
       </div>
@@ -226,7 +274,11 @@ export function DashboardPage() {
               <ActivityCard
                 key={activity.id}
                 activity={activity}
-                plan={activity.performancePlanId ? (planById.get(activity.performancePlanId) ?? null) : null}
+                plan={
+                  activity.performancePlanId
+                    ? (planById.get(activity.performancePlanId) ?? null)
+                    : null
+                }
                 onEdit={() => openEdit(activity.id)}
                 onDuplicate={() => void handleDuplicate(activity)}
                 onDelete={() => void requestDelete(activity)}
@@ -267,7 +319,9 @@ function StatTile({ label, value, sub, href, warn }: StatTileProps) {
         aria-hidden="true"
       />
       <p className="pl-1.5 text-xs font-medium text-muted-foreground">{label}</p>
-      <p className={`pl-1.5 font-mono text-2xl font-bold tracking-tight ${warn ? 'text-warning' : 'text-foreground'}`}>
+      <p
+        className={`pl-1.5 font-mono text-2xl font-bold tracking-tight ${warn ? 'text-warning' : 'text-foreground'}`}
+      >
         {value}
       </p>
       {sub ? <p className="pl-1.5 text-[11px] text-muted-foreground">{sub}</p> : null}

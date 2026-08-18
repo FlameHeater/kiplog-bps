@@ -2,20 +2,32 @@ import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils/cn';
 import { NAV_ITEMS } from './navigation';
 import { useUnassignedEvidenceCount } from '@/hooks/useAllEvidence';
+import { useSettings } from '@/hooks/useSettings';
+import { useUserProfile } from '@/hooks/useUserProfile';
 
 // §14.8: 768–1279px shrinks to icon-only; ≥1280px shows the full labeled sidebar.
 export function Sidebar() {
   const unassignedCount = useUnassignedEvidenceCount();
+  const settings = useSettings();
+  const profile = useUserProfile();
 
   return (
     <aside className="hidden shrink-0 border-r border-border/60 bg-card md:flex md:w-16 md:flex-col xl:w-60">
       <div className="flex h-16 items-center justify-center gap-2 px-2 xl:justify-start xl:px-6">
-        <span
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-gradient-primary text-sm font-bold text-primary-foreground shadow-sm"
-          aria-hidden="true"
-        >
-          K
-        </span>
+        {settings?.appLogoDataUrl ? (
+          <img
+            src={settings.appLogoDataUrl}
+            alt=""
+            className="h-8 w-8 shrink-0 rounded-control object-contain"
+          />
+        ) : (
+          <span
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-gradient-primary text-sm font-bold text-primary-foreground shadow-sm transition-transform duration-200 hover:scale-105"
+            aria-hidden="true"
+          >
+            K
+          </span>
+        )}
         <span className="hidden text-lg font-semibold tracking-tight xl:inline">KipLog</span>
       </div>
       <nav className="flex-1 space-y-1 px-2 xl:px-3">
@@ -46,6 +58,30 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
+      {profile ? (
+        <div className="border-t border-border/60 p-2 xl:p-3">
+          <div className="flex items-center gap-2 rounded-control px-1 py-1.5 xl:px-2">
+            {profile.photoDataUrl ? (
+              <img
+                src={profile.photoDataUrl}
+                alt=""
+                className="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-primary/20"
+              />
+            ) : (
+              <span
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground"
+                aria-hidden="true"
+              >
+                {profile.name.slice(0, 1).toUpperCase()}
+              </span>
+            )}
+            <div className="hidden min-w-0 xl:block">
+              <p className="truncate text-xs font-medium">{profile.name}</p>
+              <p className="truncate text-[10px] text-muted-foreground">{profile.unit}</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }

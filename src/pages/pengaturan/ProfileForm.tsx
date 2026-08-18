@@ -1,4 +1,5 @@
 import { useForm } from 'react-hook-form';
+import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { UserProfileFormSchema } from '@/lib/validation';
 import type { UserProfile, UserProfileFormValues } from '@/types';
@@ -7,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ImagePickerField } from '@/components/common/ImagePickerField';
 
 interface ProfileFormProps {
   initial?: UserProfile;
@@ -32,9 +34,19 @@ export function ProfileForm({ initial, onSaved }: ProfileFormProps) {
     },
   });
 
+  /**
+   * Gambar tidak ikut react-hook-form: nilainya bukan hasil ketikan melainkan
+   * hasil olahan berkas, dan menaruhnya di form state hanya menambah lapisan
+   * tanpa memberi validasi apa pun.
+   */
+  const [photoDataUrl, setPhotoDataUrl] = useState(initial?.photoDataUrl);
+  const [logoDataUrl, setLogoDataUrl] = useState(initial?.logoDataUrl);
+
   async function onSubmit(values: UserProfileFormValues) {
     await userProfileRepository.save({
       ...values,
+      photoDataUrl,
+      logoDataUrl,
       id: 'me',
       updatedAt: new Date().toISOString(),
     });
@@ -48,6 +60,22 @@ export function ProfileForm({ initial, onSaved }: ProfileFormProps) {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <ImagePickerField
+              label="Foto profil"
+              hint="Tampil di sidebar dan bilah atas. Disimpan di perangkat ini."
+              shape="circle"
+              value={photoDataUrl}
+              onChange={setPhotoDataUrl}
+            />
+            <ImagePickerField
+              label="Logo unit kerja"
+              hint="Dipakai pada kop PDF Data Dukung, menggantikan logo BPS bawaan."
+              value={logoDataUrl}
+              onChange={setLogoDataUrl}
+            />
+          </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="name">Nama (termasuk gelar)</Label>
             <Input id="name" placeholder="mis. I Made Contoh, S.Tr.Stat" {...register('name')} />

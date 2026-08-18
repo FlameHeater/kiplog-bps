@@ -15,6 +15,10 @@ export const AppSettingsSchema = z.object({
   defaultCountsTowardSkp: z.boolean().default(true),
   theme: z.enum(['light', 'dark', 'system']).default('system'),
   accentColor: z.enum(['navy', 'teal', 'indigo', 'emerald', 'orange']).default('navy'),
+  // Logo aplikasi, menggantikan mark bawaan di sidebar. Ditaruh di pengaturan,
+  // bukan di profil, karena ini soal tampilan aplikasi — bukan identitas orang
+  // yang memakainya.
+  appLogoDataUrl: z.string().optional(),
   maxFileSizeMb: z.number().default(10),
   autoCompressImages: z.boolean().default(true),
   monthEndReminderDays: z.number().int().default(5),

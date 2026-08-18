@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { BottomNav } from './BottomNav';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useActivityModalStore } from '@/features/activities/activity-modal-store';
 import { StorageQuotaBanner } from '@/components/common/StorageQuotaBanner';
 import { ThemeToggleButton } from '@/components/common/ThemeToggleButton';
+import { useUserProfile } from '@/hooks/useUserProfile';
 import { GlobalSearchDialog } from '@/features/search/GlobalSearchDialog';
 
 // NFR-02/NFR-10 — ActivityFormModal pulls in react-hook-form, zod, and the
@@ -23,6 +24,8 @@ const ActivityFormModal = lazy(() =>
 export function AppShell() {
   const openNew = useActivityModalStore((s) => s.openNew);
   const [searchOpen, setSearchOpen] = useState(false);
+  const profile = useUserProfile();
+  const location = useLocation();
 
   // FR-SCH-01: Ctrl/Cmd+K opens global search from anywhere in the app.
   useEffect(() => {
@@ -52,6 +55,14 @@ export function AppShell() {
           </button>
           <div className="flex items-center gap-2">
             <ThemeToggleButton />
+            {profile?.photoDataUrl ? (
+              <img
+                src={profile.photoDataUrl}
+                alt={profile.name}
+                title={profile.name}
+                className="h-9 w-9 rounded-full object-cover ring-2 ring-primary/20"
+              />
+            ) : null}
             <Button onClick={() => openNew()}>
               <Plus className="h-4 w-4" aria-hidden="true" />
               Tambah Kegiatan
@@ -59,7 +70,12 @@ export function AppShell() {
           </div>
         </header>
         <main className="flex-1 px-4 pb-20 pt-6 md:px-8 md:pb-6">
-          <div className="mx-auto max-w-6xl">
+          {/*
+            `key` pada rute membuat React memasang ulang blok ini setiap pindah
+            menu, sehingga animasi masuknya terputar lagi. Tanpa itu, animasi
+            hanya terlihat sekali seumur sesi.
+          */}
+          <div key={location.pathname} className="animate-page mx-auto max-w-6xl">
             <StorageQuotaBanner />
             <Outlet />
           </div>
