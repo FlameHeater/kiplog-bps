@@ -342,6 +342,52 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     expect(out.split('Gagal:')[0]).not.toContain('Tanggal');
   });
 
+  it('menemukan Tanggal lewat placeholder saat labelnya tidak terbaca', () => {
+    // Persis kegagalan yang dilaporkan pengguna: panel bilang "Tanggal (field
+    // tidak ditemukan)". Placeholder melekat pada kontrolnya sendiri, jadi
+    // jauh lebih kokoh daripada kedekatan dengan label.
+    const label = document.querySelector('#f-date')!.closest('.row')!.querySelector('label')!;
+    label.textContent = 'Tgl.';
+
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    expect(document.querySelector<HTMLInputElement>('#f-date')!.value).toBe('2026-08-17');
+  });
+
+  it('mencentang lewat pembungkus saat klik pada input aslinya tidak berpengaruh', () => {
+    // Komponen checkbox biasanya menyembunyikan input aslinya di balik
+    // pembungkus yang menerima klik — inilah sebab "centang tidak berubah".
+    const skp = document.querySelector<HTMLInputElement>('#f-skp')!;
+    skp.addEventListener('click', (e) => {
+      if (e.target !== skp) return;
+      e.preventDefault();
+    });
+    skp.parentElement!.addEventListener('click', (e) => {
+      if (e.target === skp) return;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')!.set!.call(skp, true);
+    });
+
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    expect(skp.checked).toBe(true);
+    expect(document.querySelector('#kiplog-out')!.textContent).not.toContain(
+      'centang tidak berubah'
+    );
+  });
+
+  it('menyediakan diagnosa struktur form tanpa membocorkan isi field', () => {
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    document.querySelector<HTMLButtonElement>('#kiplog-diag')!.click();
+
+    const report = document.querySelector<HTMLTextAreaElement>('#kiplog-in')!.value;
+    expect(report).toContain('DIAGNOSA KipLog autofill');
+    expect(report).toContain('Tanggal');
+    expect(report).toContain('placeholder="Pilih tanggal"');
+    // Tidak boleh memuat isi kegiatan atau nama pegawai.
+    expect(report).not.toContain(activity.description);
+    expect(report).not.toContain('Nama Pegawai');
+  });
+
   it('TIDAK menekan Save', () => {
     const onSave = vi.fn();
     document.querySelector('#f-save')!.addEventListener('click', onSave);

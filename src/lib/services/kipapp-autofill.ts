@@ -405,6 +405,56 @@ export const AUTOFILL_SCRIPT = `(function () {
     return false;
   }
 
+  /**
+   * Mencari kontrol lewat teks placeholder-nya.
+   *
+   * Penanda ini lebih kokoh daripada kedekatan dengan label karena melekat
+   * pada kontrolnya sendiri dan terlihat langsung di layar ("Pilih tanggal",
+   * "Pilih jam", "Pilih rencana kinerja SKP"). Dipakai sebagai cadangan ketika
+   * penelusuran lewat label gagal — yang persis terjadi pada field Tanggal.
+   */
+  function byPlaceholder(text, index) {
+    var wanted = norm(text);
+    var found = list('input, textarea').filter(function (el) {
+      if (inPanel(el) || el.disabled || el.readOnly || !visible(el)) return false;
+      return norm(el.getAttribute('placeholder')) === wanted;
+    });
+    return found[index || 0] || null;
+  }
+
+  /** Kontrol sebuah field: lewat label dulu, lalu placeholder sebagai cadangan. */
+  function locate(label, placeholder, index) {
+    return findControl(label) || (placeholder ? byPlaceholder(placeholder, index) : null);
+  }
+
+  /**
+   * Mengubah centang, lalu MEMASTIKANNYA berubah.
+   *
+   * Komponen checkbox biasanya menyembunyikan input aslinya di balik pembungkus
+   * yang menerima klik, sehingga mengklik input tersembunyi itu bisa tidak
+   * berpengaruh sama sekali — inilah yang membuat "Masukan ke capaian SKP"
+   * gagal. Dicoba berlapis: input, pembungkusnya, induknya, lalu terakhir
+   * menyetel nilainya langsung beserta event-nya.
+   */
+  function toggleCheckbox(ctl, wanted) {
+    if (ctl.checked === wanted) return true;
+    ctl.click();
+    if (ctl.checked === wanted) return true;
+
+    var wrapper = ctl.parentElement;
+    for (var up = 0; up < 2 && wrapper; up++) {
+      tap(wrapper);
+      if (ctl.checked === wanted) return true;
+      wrapper = wrapper.parentElement;
+    }
+
+    var desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+    if (desc && desc.set) desc.set.call(ctl, wanted);
+    ctl.dispatchEvent(new Event('input', { bubbles: true }));
+    ctl.dispatchEvent(new Event('change', { bubbles: true }));
+    return ctl.checked === wanted;
+  }
+
   function mark(el) {
     if (el) el.style.outline = '2px solid #16a34a';
   }
@@ -440,13 +490,13 @@ export const AUTOFILL_SCRIPT = `(function () {
     // 1. Pengalih tampilan: field jam belum ada di halaman sebelum dicentang.
     steps.push(function (next) {
       var range = findControl('Gunakan periode tanggal', 'input[type=checkbox]');
-      if (range && range.checked) range.click();
+      if (range) toggleCheckbox(range, false);
 
       jamCheckbox = findControl('Gunakan jam', 'input[type=checkbox]');
       if (!jamCheckbox) {
         if (wantJam) notes.push('checkbox "Gunakan jam" tidak ditemukan');
-      } else if (jamCheckbox.checked !== wantJam) {
-        jamCheckbox.click();
+      } else {
+        toggleCheckbox(jamCheckbox, wantJam);
       }
       next();
     });
@@ -461,9 +511,8 @@ export const AUTOFILL_SCRIPT = `(function () {
         var ctl = findControl(label);
         if (!ctl) { failed.push(label + ' (field tidak ditemukan)'); continue; }
         if (ctl.type === 'checkbox') {
-          if (ctl.checked !== !!value) ctl.click();
-          if (ctl.checked === !!value) ok(label, ctl);
-          else failed.push(label + ' (centang tidak berubah)');
+          if (toggleCheckbox(ctl, !!value)) ok(label, ctl);
+          else failed.push(label + ' (centang tidak berubah walau sudah dicoba lewat pembungkusnya)');
         } else {
           setNative(ctl, String(value));
           if (norm(ctl.value) === norm(String(value))) ok(label, ctl);
@@ -479,13 +528,13 @@ export const AUTOFILL_SCRIPT = `(function () {
      * Mengetik saja tidak memilih apa pun — inilah yang membuat percobaan
      * pengguna berhenti dengan teks tertulis tapi tidak terpilih.
      */
-    function comboboxSteps(label, value) {
+    function comboboxSteps(label, value, placeholder) {
       var ctl = null;
       var search = null;
       var before = null;
 
       steps.push(function (next) {
-        ctl = findControl(label);
+        ctl = locate(label, placeholder);
         if (!ctl) { failed.push(label + ' (field tidak ditemukan)'); next(); return; }
         before = snapshotInputs();
         tap(ctl);
@@ -541,12 +590,12 @@ export const AUTOFILL_SCRIPT = `(function () {
      * sendiri; kalau nilainya tidak tercatat, coba kotak isian yang muncul di
      * dalam popup. Diperiksa setelah tiap percobaan, bukan diasumsikan.
      */
-    function pickerSteps(label, value) {
+    function pickerSteps(label, value, placeholder, index) {
       var ctl = null;
       var before = null;
 
       steps.push(function (next) {
-        ctl = findControl(label);
+        ctl = locate(label, placeholder, index);
         if (!ctl) { failed.push(label + ' (field tidak ditemukan)'); next(); return; }
         before = snapshotInputs();
         tap(ctl);
@@ -578,11 +627,14 @@ export const AUTOFILL_SCRIPT = `(function () {
       });
     }
 
-    if (data.rencanaKinerja) comboboxSteps('Rencana Kinerja', data.rencanaKinerja);
-    if (data.tanggal) pickerSteps('Tanggal', data.tanggal);
+    if (data.rencanaKinerja) {
+      comboboxSteps('Rencana Kinerja', data.rencanaKinerja, 'Pilih rencana kinerja SKP');
+    }
+    if (data.tanggal) pickerSteps('Tanggal', data.tanggal, 'Pilih tanggal');
     if (wantJam) {
-      pickerSteps('Jam Mulai', data.jamMulai);
-      pickerSteps('Jam Selesai', data.jamSelesai);
+      // Kedua field jam memakai placeholder yang sama, jadi dibedakan urutannya.
+      pickerSteps('Jam Mulai', data.jamMulai, 'Pilih jam', 0);
+      pickerSteps('Jam Selesai', data.jamSelesai, 'Pilih jam', 1);
     }
 
     /**
@@ -615,11 +667,56 @@ export const AUTOFILL_SCRIPT = `(function () {
     'border:1px solid #cbd5e1;border-radius:6px;padding:6px"></textarea>' +
     '<button id="kiplog-go" style="margin-top:8px;width:100%;padding:8px;border:0;border-radius:6px;' +
     'background:#0f172a;color:#fff;font-weight:600;cursor:pointer">Isi Form</button>' +
+    '<button id="kiplog-diag" style="margin-top:6px;width:100%;padding:6px;border:1px solid #cbd5e1;' +
+    'border-radius:6px;background:#fff;color:#0f172a;cursor:pointer">Salin diagnosa (kalau ada yang gagal)</button>' +
     '<div id="kiplog-out" style="margin-top:8px;white-space:pre-wrap"></div>';
   document.body.appendChild(panel);
 
   var out = panel.querySelector('#kiplog-out');
   panel.querySelector('#kiplog-x').onclick = function () { panel.remove(); };
+
+  /**
+   * Laporan struktur form, untuk dikirim balik saat ada yang masih gagal.
+   *
+   * Hanya bentuk kontrolnya: tag, jenis, placeholder, dan potongan class —
+   * tidak ada isi field, tidak ada nama, tidak ada data kegiatan. Ini yang
+   * mengubah putaran perbaikan berikutnya dari menebak menjadi berdasar bukti.
+   */
+  function diagnose() {
+    var lines = ['DIAGNOSA KipLog autofill', 'host: ' + location.hostname];
+    lines.push('dialog ditemukan: ' + (SCOPE !== document.body ? 'ya' : 'TIDAK (jatuh ke seluruh halaman)'));
+    for (var i = 0; i < KNOWN_LABELS.length; i++) {
+      var label = KNOWN_LABELS[i];
+      var ctl = findControl(label);
+      if (!ctl) { lines.push('- ' + label + ': label/kontrol TIDAK ditemukan'); continue; }
+      lines.push('- ' + label + ': ' + ctl.tagName.toLowerCase() +
+        (ctl.type ? '[' + ctl.type + ']' : '') +
+        ' placeholder="' + (ctl.getAttribute('placeholder') || '') + '"' +
+        ' class="' + String(ctl.className || '').slice(0, 60) + '"');
+    }
+    lines.push('input terlihat di dialog:');
+    var inputs = list('input, textarea', SCOPE);
+    for (var k = 0; k < inputs.length; k++) {
+      var el = inputs[k];
+      if (inPanel(el)) continue;
+      lines.push('  * ' + el.tagName.toLowerCase() +
+        (el.type ? '[' + el.type + ']' : '') +
+        ' placeholder="' + (el.getAttribute('placeholder') || '') + '"' +
+        (el.readOnly ? ' readonly' : '') + (el.disabled ? ' disabled' : '') +
+        ' class="' + String(el.className || '').slice(0, 60) + '"');
+    }
+    // Karakter baris baru dibangun saat jalan, bukan lewat escape: escape di
+    // dalam template literal ini dinormalkan alat format sehingga menyisipkan
+    // baris baru sungguhan ke tengah string dan merusak skripnya.
+    return lines.join(String.fromCharCode(10));
+  }
+
+  panel.querySelector('#kiplog-diag').onclick = function () {
+    var box = panel.querySelector('#kiplog-in');
+    box.value = diagnose();
+    box.focus();
+    box.select();
+  };
   panel.querySelector('#kiplog-go').onclick = function () {
     var raw = panel.querySelector('#kiplog-in').value;
     var data;
