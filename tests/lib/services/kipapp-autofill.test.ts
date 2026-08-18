@@ -5,6 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AUTOFILL_SCRIPT,
+  AUTOFILL_VERSION,
   autofillBlockedReason,
   buildAutofillPayload,
   buildAutofillBatch,
@@ -906,14 +907,79 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     expect(dateValue()).toBe('2026-08-17');
   });
 
-  it('menutup popup dan melaporkan gagal saat tanggal tidak bisa dikunci sama sekali', () => {
+  it('menutup kalender dengan mengklik dialog, bukan dengan Escape', () => {
+    // Dikonfirmasi pengguna di KipApp: Escape tidak menutup kalendernya; yang
+    // menutup adalah klik di tempat lain pada dialog. Kalender yang menggantung
+    // terbuka menutupi tombol Save, jadi ini menentukan untuk mode otomatis.
     const trigger = document.querySelector<HTMLInputElement>('.ant-calendar-picker-input')!;
     const popup = document.getElementById('date-portal')!;
-    let escaped = false;
+    let escapePressed = false;
+    let dialogClicked = false;
+
     trigger.addEventListener('mousedown', () => {
       popup.innerHTML = '<div class="ant-calendar"><input class="ant-calendar-input" /></div>';
       popup.querySelector('.ant-calendar-input')!.addEventListener('keydown', (event) => {
-        if ((event as KeyboardEvent).key === 'Escape') escaped = true;
+        if ((event as KeyboardEvent).key === 'Escape') escapePressed = true;
+      });
+    });
+    document.querySelector('.ant-modal-title')!.addEventListener('click', () => {
+      dialogClicked = true;
+    });
+
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    expect(dialogClicked).toBe(true);
+    expect(escapePressed).toBe(false);
+    const out = document.querySelector('#kiplog-out')!.textContent!;
+    expect(out.split('Gagal:')[1]).toContain('Tanggal');
+  });
+
+  it('mengunci tanggal lewat klik di luar kalender saat Enter dan grid gagal', () => {
+    // Klik luar lazim membuat komponen mengunci nilai yang sudah diketik,
+    // jadi ia dipakai sebagai percobaan terakhir sebelum menyerah.
+    const trigger = document.querySelector<HTMLInputElement>('.ant-calendar-picker-input')!;
+    const popup = document.getElementById('date-portal')!;
+    trigger.addEventListener('mousedown', () => {
+      popup.innerHTML = '<div class="ant-calendar"><input class="ant-calendar-input" /></div>';
+    });
+    document.querySelector('.ant-modal-title')!.addEventListener('click', () => {
+      const inner = popup.querySelector<HTMLInputElement>('.ant-calendar-input');
+      if (!inner || !inner.value) return;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        trigger,
+        inner.value
+      );
+      popup.innerHTML = '';
+    });
+
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    expect(dateValue()).toBe('2026-08-17');
+  });
+
+  it('menampilkan nomor versi skrip di judul panel', () => {
+    // Skrip tertanam di bookmark dan tidak ikut ter-update saat aplikasi
+    // di-deploy. Tanpa penanda ini, membedakan bookmark lama dan baru hanya
+    // bisa ditebak dari gejalanya — dan itu sudah sekali menyesatkan.
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    expect(document.getElementById('kiplog-head')!.textContent).toContain(`v${AUTOFILL_VERSION}`);
+  });
+
+  it('menerima tanggal yang ditampilkan ulang dalam format lain', () => {
+    // Pemilih tanggal boleh menampilkan kembali nilainya dengan format
+    // berbeda; menolaknya berarti melaporkan gagal untuk tanggal yang
+    // sebenarnya sudah masuk.
+    const trigger = document.querySelector<HTMLInputElement>('.ant-calendar-picker-input')!;
+    const popup = document.getElementById('date-portal')!;
+    trigger.addEventListener('mousedown', () => {
+      popup.innerHTML = '<div class="ant-calendar"><input class="ant-calendar-input" /></div>';
+      popup.querySelector('.ant-calendar-input')!.addEventListener('keydown', (event) => {
+        if ((event as KeyboardEvent).keyCode !== 13) return;
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+          trigger,
+          '17/08/2026'
+        );
+        popup.innerHTML = '';
       });
     });
 
@@ -921,9 +987,145 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
 
     const out = document.querySelector('#kiplog-out')!.textContent!;
     expect(out).toContain('Tanggal');
-    expect(out.split('Gagal:')[0]).not.toContain('Tanggal');
-    // Popup yang dibiarkan terbuka akan menghalangi field berikutnya.
-    expect(escaped).toBe(true);
+    expect(out).not.toContain('Gagal');
+  });
+
+  it('tetap melaporkan gagal saat pemilih tanggal tidak berubah sama sekali', () => {
+    const trigger = document.querySelector<HTMLInputElement>('.ant-calendar-picker-input')!;
+    const popup = document.getElementById('date-portal')!;
+    trigger.addEventListener('mousedown', () => {
+      popup.innerHTML = '<div class="ant-calendar"><input class="ant-calendar-input" /></div>';
+    });
+
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    const out = document.querySelector('#kiplog-out')!.textContent!;
+    expect(out.split('Gagal:')[1]).toContain('Tanggal');
+  });
+
+  it('menawarkan lewati-dan-lanjutkan saat mode otomatis berhenti karena gagal', () => {
+    const second = { ...activity, date: '2026-08-18', description: 'Kegiatan hari berikutnya' };
+    const { batch } = buildAutofillBatch([activity, second], new Map([[plan.id, plan]]));
+    const kipapp = wireSaveAndAdd();
+    // Kegiatan pertama pasti gagal: field Data Dukung dihapus.
+    document.querySelector('#f-link')!.closest('.ant-row')!.remove();
+
+    runBookmarklet(serializeAutofillBatch(batch));
+    document.querySelector<HTMLButtonElement>('#kiplog-auto')!.click();
+    vi.runAllTimers();
+
+    const skip = document.querySelector<HTMLButtonElement>('#kiplog-skip')!;
+    expect(skip.style.display).not.toBe('none');
+    expect(kipapp.saved).toEqual([]);
+
+    // Melewati harus melanjutkan antrean, bukan mengulangnya dari awal.
+    renderFakeKipAppDialog();
+    const resumed = wireSaveAndAdd();
+    skip.click();
+    vi.runAllTimers();
+
+    expect(resumed.saved).toEqual([second.description]);
+  });
+
+  it('menyembunyikan tombol lewati setelah penyebabnya diperbaiki dan otomatis lanjut', () => {
+    const { batch } = buildAutofillBatch([activity], new Map([[plan.id, plan]]));
+    wireSaveAndAdd();
+    document.querySelector('#f-link')!.closest('.ant-row')!.remove();
+
+    runBookmarklet(serializeAutofillBatch(batch));
+    document.querySelector<HTMLButtonElement>('#kiplog-auto')!.click();
+    vi.runAllTimers();
+    expect(document.querySelector<HTMLElement>('#kiplog-skip')!.style.display).not.toBe('none');
+
+    // Form dipulihkan utuh, lalu dijalankan ulang: kali ini harus berhasil.
+    renderFakeKipAppDialog();
+    const repaired = wireSaveAndAdd();
+    document.querySelector<HTMLButtonElement>('#kiplog-auto')!.click();
+    vi.runAllTimers();
+
+    expect(repaired.saved).toEqual([activity.description]);
+    expect(document.querySelector<HTMLElement>('#kiplog-skip')!.style.display).toBe('none');
+  });
+
+  it('menutup popup yang menggantung sebelum menekan Save di mode otomatis', () => {
+    // Kalender yang masih terbuka menutupi tombol Save; kalau tidak ditutup,
+    // mode otomatis berhenti bukan karena isinya salah melainkan karena
+    // tombolnya tidak terjangkau.
+    const { batch } = buildAutofillBatch([activity], new Map([[plan.id, plan]]));
+    const kipapp = wireSaveAndAdd();
+
+    // Kalender ini tidak pernah menutup dirinya sendiri.
+    const trigger = document.querySelector<HTMLInputElement>('.ant-calendar-picker-input')!;
+    const popup = document.getElementById('date-portal')!;
+    trigger.addEventListener('mousedown', () => {
+      popup.innerHTML = '<div class="ant-calendar"><input class="ant-calendar-input" /></div>';
+      popup.querySelector('.ant-calendar-input')!.addEventListener('keydown', (event) => {
+        if ((event as KeyboardEvent).keyCode !== 13) return;
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+          trigger,
+          '2026-08-17'
+        );
+      });
+    });
+
+    runBookmarklet(serializeAutofillBatch(batch));
+    document.querySelector<HTMLButtonElement>('#kiplog-auto')!.click();
+    vi.runAllTimers();
+
+    expect(kipapp.saved).toEqual([activity.description]);
+  });
+
+  it('menunggu centang tersinkron, tidak menyimpulkan gagal dari bacaan basi', () => {
+    // Vue merender ulang secara asinkron. Versi sebelumnya membaca seketika,
+    // menyimpulkan gagal, lalu mengklik lagi — membolak-balik centang yang
+    // sudah benar dan melaporkan gagal untuk field yang di layar tercentang.
+    const skp = document.querySelector<HTMLInputElement>('#f-skp')!;
+    let clicks = 0;
+    skp.addEventListener('click', (event) => {
+      clicks++;
+      event.preventDefault();
+      // Perubahan baru terlihat setelah satu putaran, seperti nextTick Vue.
+      setTimeout(() => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')!.set!.call(
+          skp,
+          true
+        );
+      }, 30);
+    });
+
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    expect(skp.checked).toBe(true);
+    expect(clicks).toBe(1);
+    const out = document.querySelector('#kiplog-out')!.textContent!;
+    expect(out).not.toContain('centang tidak berubah');
+  });
+
+  it('membaca keadaan centang dari kelas pembungkus, bukan hanya properti input', () => {
+    // Ant Design menandai keadaan lewat kelas ant-checkbox-checked pada
+    // pembungkusnya, dan kelas itu lebih dulu berubah daripada properti input.
+    const skp = document.querySelector<HTMLInputElement>('#f-skp')!;
+    const box = skp.parentElement!;
+    skp.addEventListener('click', (event) => {
+      event.preventDefault();
+      box.className = 'ant-checkbox ant-checkbox-checked';
+    });
+
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    const out = document.querySelector('#kiplog-out')!.textContent!;
+    expect(out).toContain('Masukan ke capaian SKP');
+    expect(out).not.toContain('centang tidak berubah');
+  });
+
+  it('tetap melaporkan gagal saat centang benar-benar tidak berubah', () => {
+    const skp = document.querySelector<HTMLInputElement>('#f-skp')!;
+    skp.addEventListener('click', (event) => event.preventDefault());
+    Object.defineProperty(skp, 'checked', { get: () => false, set: () => {}, configurable: true });
+
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+
+    expect(document.querySelector('#kiplog-out')!.textContent).toContain('centang tidak berubah');
   });
 
   it('TIDAK menekan Save', () => {

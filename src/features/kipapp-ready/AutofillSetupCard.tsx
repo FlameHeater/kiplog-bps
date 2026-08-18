@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { Check, Copy, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { buildBookmarkletHref, KIPAPP_HOSTS } from '@/lib/services/kipapp-autofill';
+import {
+  AUTOFILL_VERSION,
+  buildBookmarkletHref,
+  KIPAPP_HOSTS,
+} from '@/lib/services/kipapp-autofill';
 import { copyToClipboard } from '@/lib/utils/clipboard';
 
 /**
@@ -48,7 +52,11 @@ export function AutofillSetupCard() {
           <ol className="list-decimal space-y-1.5 pl-5">
             <li>
               Tarik tautan <strong>KipLog Autofill</strong> di bawah ke bilah bookmark browser Anda
-              (atau salin dan buat bookmark baru dengan alamat itu).
+              (atau salin dan buat bookmark baru dengan alamat itu). Skripnya tertanam di dalam
+              bookmark, jadi <strong>tidak ikut ter-update sendiri</strong> — setiap kali aplikasi
+              ini diperbarui, hapus bookmark lama dan tarik ulang. Versi saat ini
+              <strong>v{AUTOFILL_VERSION}</strong>, dan nomor itu juga tertera di judul panel supaya
+              bisa dicocokkan.
             </li>
             <li>
               Buka KipApp, masuk ke <strong>Pelaksanaan Kinerja › Pelaksanaan</strong>, pilih Tahun,

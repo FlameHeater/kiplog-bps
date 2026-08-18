@@ -176,6 +176,17 @@ export function autofillBlockedReason(activity: Activity): string | null {
   return null;
 }
 
+/**
+ * Nomor versi skrip, ditampilkan di judul panel.
+ *
+ * Skrip ini tertanam di dalam bookmark, jadi ia TIDAK ikut ter-update saat
+ * aplikasi di-deploy — pengguna harus menarik ulang tautannya. Tanpa penanda
+ * versi, satu-satunya cara membedakan bookmark lama dan baru adalah menebak
+ * dari gejalanya, dan itu sudah sekali menghabiskan satu putaran perbaikan.
+ * Naikkan angka ini setiap kali isi skrip berubah.
+ */
+export const AUTOFILL_VERSION = 10;
+
 /** Jeda antar langkah, memberi waktu popup KipApp muncul dan menutup. */
 export const AUTOFILL_STEP_DELAY_MS = 250;
 
@@ -215,6 +226,7 @@ export const AUTOFILL_SCRIPT = `(function () {
     return;
   }
 
+  var VERSION = ${AUTOFILL_VERSION};
   var PANEL_ID = 'kiplog-autofill-panel';
   var DELAY = ${AUTOFILL_STEP_DELAY_MS};
   var TRIES = ${AUTOFILL_WAIT_TRIES};
@@ -399,6 +411,8 @@ export const AUTOFILL_SCRIPT = `(function () {
       var dateEl = cell.querySelector('.ant-calendar-date') || cell;
       if (norm(dateEl.textContent) !== day) continue;
       tap(dateEl);
+      // Sebagian versi memasang penangannya di selnya, bukan di isi selnya.
+      if (dateEl !== cell) tap(cell);
       return true;
     }
     return false;
@@ -416,6 +430,37 @@ export const AUTOFILL_SCRIPT = `(function () {
     try { result = test(); } catch (e) { result = null; }
     if (result || tries <= 0) { done(result); return; }
     setTimeout(function () { waitFor(test, done, tries - 1); }, INTERVAL);
+  }
+
+  /**
+   * Menutup popup pemilih dengan mengklik tempat netral di dalam dialog.
+   *
+   * Escape TIDAK menutupnya — dikonfirmasi pengguna langsung di KipApp. Yang
+   * bekerja adalah klik di tempat lain pada dialognya. Ini bukan sekadar
+   * kerapian: kalender yang menggantung terbuka menutupi tombol Save, sehingga
+   * mode otomatis bisa berhenti bukan karena isinya salah melainkan karena
+   * tombolnya tidak terjangkau. Klik luar juga lazim memicu komponen mengunci
+   * nilai yang sudah diketik, jadi ini sekaligus percobaan terakhir.
+   */
+  function dismissPopup() {
+    var target = null;
+    if (MODAL) {
+      target = MODAL.querySelector('.ant-modal-title') ||
+        MODAL.querySelector('.ant-modal-header') ||
+        MODAL.querySelector('.ant-modal-body') ||
+        MODAL;
+    }
+    if (!target || inPanel(target)) return false;
+    tap(target);
+    return true;
+  }
+
+  function popupOpen() {
+    var popups = list('.ant-calendar-picker-container, .ant-time-picker-panel, .ant-calendar, .ant-time-picker-panel-inner');
+    for (var i = 0; i < popups.length; i++) {
+      if (!inPanel(popups[i]) && visible(popups[i])) return true;
+    }
+    return false;
   }
 
   function mark(el) {
@@ -453,28 +498,55 @@ export const AUTOFILL_SCRIPT = `(function () {
   }
 
   /**
-   * Mengubah centang lalu memastikannya berubah. Input aslinya tersembunyi di
-   * balik \`ant-checkbox-inner\`, jadi bila klik pada input tidak berpengaruh,
-   * lapisan itu yang diklik.
+   * Keadaan centang yang sebenarnya.
+   *
+   * Properti checked pada input saja tidak cukup: Vue mengendalikannya dan
+   * kelas ant-checkbox-checked pada pembungkusnyalah yang lebih dulu
+   * mencerminkan keadaan baru. Keduanya dibaca supaya tidak menyimpulkan
+   * "belum berubah" dari satu sumber yang kebetulan belum tersinkron.
    */
-  function setChecked(cb, wanted) {
-    if (!cb) return false;
-    if (cb.checked === wanted) return true;
-    cb.click();
-    if (cb.checked === wanted) return true;
-
+  function isChecked(cb) {
     var box = cb.parentElement;
-    if (box) {
-      var inner = box.querySelector('.ant-checkbox-inner');
-      if (inner) { tap(inner); if (cb.checked === wanted) return true; }
-      tap(box);
-      if (cb.checked === wanted) return true;
+    if (box && String(box.className || '').indexOf('ant-checkbox-checked') !== -1) return true;
+    return !!cb.checked;
+  }
+
+  /**
+   * Menyetel centang lalu MENUNGGU hasilnya, bukan membacanya seketika.
+   *
+   * Vue merender ulang secara asinkron, jadi membaca keadaan tepat setelah
+   * klik bisa mendapat nilai basi. Versi sebelumnya menyimpulkan "gagal" dari
+   * bacaan basi itu, lalu mengklik lagi dan lagi — membolak-balik centang yang
+   * sudah benar, dan akhirnya melaporkan gagal untuk field yang di layar
+   * jelas-jelas sudah tercentang. Sekarang tiap percobaan diberi waktu, dan
+   * percobaan berikutnya hanya dilakukan kalau yang sebelumnya benar-benar
+   * tidak berpengaruh.
+   */
+  function setCheckedAsync(cb, wanted, done) {
+    if (!cb) { done(false); return; }
+    if (isChecked(cb) === wanted) { done(true); return; }
+
+    function settled() {
+      return isChecked(cb) === wanted ? 'ya' : null;
     }
 
-    var desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
-    if (desc && desc.set) desc.set.call(cb, wanted);
-    cb.dispatchEvent(new Event('change', { bubbles: true }));
-    return cb.checked === wanted;
+    cb.click();
+    waitFor(settled, function (first) {
+      if (first) { done(true); return; }
+
+      var box = cb.parentElement;
+      var inner = box ? box.querySelector('.ant-checkbox-inner') : null;
+      if (inner) tap(inner);
+      waitFor(settled, function (second) {
+        if (second) { done(true); return; }
+
+        // Jalan terakhir: setel properti langsung beserta event-nya.
+        var desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+        if (desc && desc.set) desc.set.call(cb, wanted);
+        cb.dispatchEvent(new Event('change', { bubbles: true }));
+        waitFor(settled, function (third) { done(!!third); }, 6);
+      }, 6);
+    }, 6);
   }
 
   function apply(data, report) {
@@ -495,14 +567,15 @@ export const AUTOFILL_SCRIPT = `(function () {
 
     // 1. Pengalih tampilan: field jam belum ada di halaman sebelum dicentang.
     steps.push(function (next) {
-      setChecked(toggleByText('Gunakan periode tanggal'), false);
-      jamCheckbox = toggleByText('Gunakan jam');
-      if (!jamCheckbox) {
-        if (wantJam) notes.push('checkbox "Gunakan jam" tidak ditemukan');
-      } else {
-        setChecked(jamCheckbox, wantJam);
-      }
-      next();
+      setCheckedAsync(toggleByText('Gunakan periode tanggal'), false, function () {
+        jamCheckbox = toggleByText('Gunakan jam');
+        if (!jamCheckbox) {
+          if (wantJam) notes.push('checkbox "Gunakan jam" tidak ditemukan');
+          next();
+          return;
+        }
+        setCheckedAsync(jamCheckbox, wantJam, function () { next(); });
+      });
     });
 
     // 2. Field teks biasa.
@@ -528,9 +601,11 @@ export const AUTOFILL_SCRIPT = `(function () {
       var label = LABELS.masukanKeCapaianSkp;
       var cb = toggleByText(label);
       if (!cb) { failed.push(label + ' (checkbox tidak ditemukan)'); next(); return; }
-      if (setChecked(cb, !!data.masukanKeCapaianSkp)) ok(label, cb);
-      else failed.push(label + ' (centang tidak berubah)');
-      next();
+      setCheckedAsync(cb, !!data.masukanKeCapaianSkp, function (changed) {
+        if (changed) ok(label, cb);
+        else failed.push(label + ' (centang tidak berubah)');
+        next();
+      });
     });
 
     /**
@@ -596,11 +671,13 @@ export const AUTOFILL_SCRIPT = `(function () {
     function pickerSteps(label, value, triggerSelector, innerSelector) {
       var trigger = null;
       var isDate = triggerSelector === ANT.dateTrigger;
+      var valueBefore = '';
 
       steps.push(function (next) {
         var row = rowFor(label);
         trigger = pick(row, triggerSelector) || pick(row, 'input');
         if (!trigger) { failed.push(label + ' (pemilih tidak ditemukan)'); next(); return; }
+        valueBefore = trigger.value;
         tap(trigger);
         trigger.focus();
         next();
@@ -628,27 +705,55 @@ export const AUTOFILL_SCRIPT = `(function () {
           setNative(target, value);
           press(target, 'Enter');
 
+          /**
+           * Tersimpan bila nilainya SAMA PERSIS, atau bila nilainya berubah
+           * menjadi tidak kosong.
+           *
+           * Syarat "sama persis" saja terlalu ketat: pemilih tanggal bisa
+           * menampilkan kembali nilainya dalam format lain daripada yang
+           * diketikkan, dan menolaknya berarti melaporkan gagal untuk tanggal
+           * yang sebenarnya sudah masuk. Field ini kosong sebelum diisi
+           * (placeholder "Pilih tanggal") dan tiap dialog selalu baru, jadi
+           * "berubah dan tidak kosong" sudah cukup menentukan.
+           */
           function committed() {
-            return norm(trigger.value) === norm(value) ? 'ya' : null;
+            var now = trigger.value;
+            if (norm(now) === norm(value)) return 'ya';
+            return now && now !== valueBefore ? 'ya' : null;
           }
 
           waitFor(committed, function (first) {
-            if (first) { ok(label, trigger); next(); return; }
+            if (first) { closeThen(function () { ok(label, trigger); next(); }); return; }
 
             // Enter belum mengunci nilainya: klik tanggalnya di grid, seperti
             // yang dilakukan manusia.
             var clicked = isDate ? clickCalendarDay(value) : false;
             waitFor(committed, function (second) {
-              if (second) { ok(label, trigger); next(); return; }
-              // Popup dibiarkan terbuka akan menghalangi field berikutnya,
-              // jadi ditutup dulu sebelum melaporkan gagal.
-              press(target, 'Escape');
-              failed.push(label + (clicked
-                ? ' (tanggal diklik di kalender tapi tidak tercatat)'
-                : ' (nilai ditolak kotak isian di dalam popup)'));
-              next();
+              if (second) { closeThen(function () { ok(label, trigger); next(); }); return; }
+
+              // Percobaan terakhir: klik di tempat lain pada dialog. Itulah
+              // yang menutup kalender di KipApp, dan klik luar lazim membuat
+              // komponen mengunci nilai yang sudah diketik.
+              dismissPopup();
+              waitFor(committed, function (third) {
+                if (third) { ok(label, trigger); next(); return; }
+                dismissPopup();
+                failed.push(label + (clicked
+                  ? ' (tanggal diklik di kalender tapi tidak tercatat)'
+                  : ' (nilai ditolak kotak isian di dalam popup)'));
+                next();
+              }, 8);
             }, 8);
           }, 8);
+
+          /** Pastikan popup benar-benar tertutup sebelum melanjutkan. */
+          function closeThen(done) {
+            if (!popupOpen()) { done(); return; }
+            dismissPopup();
+            waitFor(function () { return popupOpen() ? null : 'tertutup'; }, function () {
+              done();
+            }, 6);
+          }
         });
       });
     }
@@ -663,9 +768,10 @@ export const AUTOFILL_SCRIPT = `(function () {
     // Jangan tinggalkan form lebih buruk: centang "Gunakan jam" memunculkan dua
     // field WAJIB baru, jadi kalau jamnya gagal diisi, centangnya dikembalikan.
     steps.push(function (next) {
-      if (wantJam && jamCheckbox && jamCheckbox.checked && !(filled(LABELS.jamMulai) && filled(LABELS.jamSelesai))) {
-        setChecked(jamCheckbox, false);
+      if (wantJam && jamCheckbox && isChecked(jamCheckbox) && !(filled(LABELS.jamMulai) && filled(LABELS.jamSelesai))) {
         notes.push('"Gunakan jam" dikembalikan tidak tercentang karena jamnya gagal diisi; kalau dibiarkan, KipApp menuntut dua field wajib yang kosong');
+        setCheckedAsync(jamCheckbox, false, function () { next(); });
+        return;
       }
       next();
     });
@@ -686,7 +792,8 @@ export const AUTOFILL_SCRIPT = `(function () {
     '<div id="kiplog-head" title="Geser untuk memindahkan \u00b7 klik ganda untuk mengembalikan ke sudut" ' +
     'style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;' +
     'cursor:move;user-select:none">' +
-    '<b>KipLog autofill</b><button id="kiplog-x" style="border:0;background:none;font-size:16px;cursor:pointer">&times;</button></div>' +
+    '<b>KipLog autofill</b> <span style="color:#94a3b8;font-weight:400">v' + VERSION + '</span>' +
+    '<button id="kiplog-x" style="border:0;background:none;font-size:16px;cursor:pointer">&times;</button></div>' +
     '<p style="margin:0 0 6px;color:#475569">Tempel data dari KipLog, lalu Isi Form. ' +
     'Skrip ini <b>tidak menekan Save</b> \\u2014 periksa dulu, simpan sendiri.</p>' +
     '<textarea id="kiplog-in" rows="5" style="width:100%;box-sizing:border-box;font:12px monospace;' +
@@ -722,6 +829,9 @@ export const AUTOFILL_SCRIPT = `(function () {
       'background:#b45309;color:#fff;font-weight:600;cursor:pointer">Jalankan otomatis (menekan Save sendiri)</button>' +
       '<button id="kiplog-abort" style="display:none;width:100%;margin-top:6px;padding:8px;border:0;' +
       'border-radius:6px;background:#dc2626;color:#fff;font-weight:600;cursor:pointer">BERHENTI</button>' +
+      '<button id="kiplog-skip" style="display:none;width:100%;margin-top:6px;padding:8px;' +
+      'border:1px solid #b45309;border-radius:6px;background:#fff;color:#b45309;font-weight:600;' +
+      'cursor:pointer">Lewati kegiatan ini &amp; lanjutkan otomatis</button>' +
       '<button id="kiplog-quit" style="width:100%;margin-top:6px;padding:6px;border:0;' +
       'border-radius:6px;background:none;color:#64748b;cursor:pointer">Tutup antrean</button>' +
     '</div>' +
@@ -1110,6 +1220,9 @@ export const AUTOFILL_SCRIPT = `(function () {
     autoRunning = false;
     autoAbort = true;
     setAutoUI(false);
+    // Kegagalan satu kegiatan tidak boleh memaksa seluruh antrean diulang dari
+    // awal: pengguna boleh melewatinya secara SADAR dan melanjutkan.
+    panel.querySelector('#kiplog-skip').style.display = '';
     out.innerHTML = '<b style="color:#b45309">Berhenti di kegiatan ' + (queue.index + 1) + ':</b> ' +
       message + '<br><span style="color:#475569">Tidak ada yang disimpan lagi setelah ini. ' +
       'Periksa KipApp, perbaiki, lalu lanjutkan sendiri atau jalankan otomatis lagi.</span>';
@@ -1180,6 +1293,8 @@ export const AUTOFILL_SCRIPT = `(function () {
   }
 
   function autoSave(item) {
+    // Kalender atau pemilih jam yang menggantung terbuka menutupi tombol Save.
+    if (popupOpen()) dismissPopup();
     var save = buttonByText('Save', MODAL || document);
     if (!save) { autoStopWith('tombol Save tidak ditemukan di dialog'); return; }
     var previous = MODAL;
@@ -1217,7 +1332,22 @@ export const AUTOFILL_SCRIPT = `(function () {
     setTimeout(autoStep, AUTO_DELAY);
   }
 
-  panel.querySelector('#kiplog-auto').onclick = autoStart;
+  panel.querySelector('#kiplog-auto').onclick = function () {
+    panel.querySelector('#kiplog-skip').style.display = 'none';
+    autoStart();
+  };
+  panel.querySelector('#kiplog-skip').onclick = function () {
+    if (!queue) return;
+    panel.querySelector('#kiplog-skip').style.display = 'none';
+    if (queue.index >= queue.items.length - 1) {
+      hint('Ini kegiatan terakhir; tidak ada yang bisa dilewati.');
+      return;
+    }
+    queue.index++;
+    saveProgress();
+    renderQueue();
+    autoStart();
+  };
   limitSelect().onchange = function () {
     try { localStorage.setItem(LIMIT_KEY, limitSelect().value); } catch (e) { /* diabaikan */ }
     updateAutoLabel();
