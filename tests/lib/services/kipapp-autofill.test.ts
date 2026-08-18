@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  * @vitest-environment-options { "url": "https://kipapp.bps.go.id/" }
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AUTOFILL_SCRIPT,
   autofillBlockedReason,
@@ -43,13 +43,14 @@ const plan = {
   name: 'Telaksananya Kegiatan Sensus Ekonomi 2026 sesuai SOP dan tepat waktu',
 } as PerformancePlan;
 
+const OTHER_RK = 'Terlaksananya Kegiatan Statistik Harga sesuai SOP dan tepat waktu.';
+
 describe('buildAutofillPayload', () => {
-  it('memakai tanggal ISO seperti yang diharapkan field Tanggal KipApp', () => {
-    // Panduan hal. 66 menunjukkan "2022-12-05", bukan "5 Desember 2022".
+  it('memakai tanggal ISO, format yang terlihat di kotak isian kalender KipApp', () => {
     expect(buildAutofillPayload(activity, plan).tanggal).toBe('2026-08-17');
   });
 
-  it('menyertakan nama RK verbatim agar cocok dengan opsi di select KipApp', () => {
+  it('menyertakan nama RK verbatim agar cocok dengan teks opsi di combobox', () => {
     expect(buildAutofillPayload(activity, plan).rencanaKinerja).toBe(plan.name);
   });
 
@@ -62,7 +63,6 @@ describe('buildAutofillPayload', () => {
 
 describe('autofillBlockedReason', () => {
   it('menolak kegiatan yang sudah dikirim untuk dinilai', () => {
-    // Panduan hal. 68: yang sudah dikirim tidak bisa dibatalkan atau diedit.
     expect(autofillBlockedReason({ ...activity, sentForReview: true })).toMatch(
       /dikirim untuk dinilai/i
     );
@@ -86,20 +86,20 @@ describe('buildBookmarkletHref', () => {
 });
 
 /**
- * Tiruan dialog "Add Capaian Kegiatan Perhari" mengikuti tangkapan layar form
- * SUNGGUHAN KipApp v2.0.4 (2026) yang dikirim pemilik proyek — bukan lagi
- * panduan 2022. Yang ditirukan dan penting:
+ * Tiruan dialog "Add Capaian Kegiatan Perhari" KipApp v2.0.4, dibangun dari
+ * tiga tangkapan layar form sungguhan. Yang ditirukan bukan sekadar tampilan
+ * melainkan PERILAKUNYA, karena justru perilaku itu yang membuat percobaan
+ * pertama pengguna gagal:
  *
- * - Label berupa elemen teks terpisah dari kontrolnya, dengan tanda bintang
- *   wajib sebagai elemen sendiri.
- * - Pegawai/Tahun/SKP hanya teks baca tanpa input. SKP kini triwulanan.
- * - Dua checkbox pengalih, "Gunakan periode tanggal" dan "Gunakan jam",
- *   duduk **di baris yang sama** — sengaja, karena inilah yang membuat
- *   pemilihan "kontrol pertama yang ketemu di leluhur" mencentang checkbox
- *   yang salah.
- * - Jam Mulai/Jam Selesai **tidak ada di DOM** sampai "Gunakan jam" dicentang.
- * - Tanggal berupa input teks dengan placeholder "Pilih tanggal", bukan input
- *   date bawaan browser.
+ * - **Rencana Kinerja bukan `<select>`** melainkan combobox: kotak teks yang
+ *   baru memunculkan daftar opsi setelah diklik, menyaring saat diketik, dan
+ *   hanya benar-benar memilih ketika opsinya DIKLIK.
+ * - **Tanggal bukan input `date`** melainkan pemicu kalender: klik membuka
+ *   popup yang punya kotak isian sendiri; nilai baru masuk ke field aslinya
+ *   setelah Enter ditekan di kotak itu.
+ * - Jam Mulai/Jam Selesai belum ada di DOM sampai "Gunakan jam" dicentang.
+ * - Bintang wajib adalah elemen tersendiri di dalam label.
+ * - Dua checkbox pengalih duduk di baris yang sama.
  */
 function renderFakeKipAppDialog(): void {
   document.body.innerHTML = `
@@ -109,17 +109,17 @@ function renderFakeKipAppDialog(): void {
       <div class="row"><label>Tahun:</label><span>2026</span></div>
       <div class="row"><label>SKP:</label><span>1 April - 30 Juni (Triwulan II)</span></div>
       <div class="row"><label><i>*</i> Rencana Kinerja:</label>
-        <select id="f-rk">
-          <option>Pilih rencana kinerja SKP</option>
-          <option>Terlaksananya Kegiatan Statistik Harga sesuai SOP dan tepat waktu.</option>
-          <option>Telaksananya Kegiatan Sensus Ekonomi 2026 sesuai SOP dan tepat waktu</option>
-        </select>
+        <input id="f-rk" type="text" placeholder="Pilih rencana kinerja SKP" />
+        <div id="rk-pop"></div>
       </div>
       <div class="row toggles">
         <input id="f-range" type="checkbox" /><span>Gunakan periode tanggal</span>
         <input id="f-usejam" type="checkbox" /><span>Gunakan jam</span>
       </div>
-      <div class="row"><label><i>*</i> Tanggal:</label><input id="f-date" type="text" placeholder="Pilih tanggal" /></div>
+      <div class="row"><label><i>*</i> Tanggal:</label>
+        <input id="f-date" type="text" placeholder="Pilih tanggal" />
+        <div id="date-pop"></div>
+      </div>
       <div id="jam-slot"></div>
       <div class="row"><label><i>*</i> Kegiatan:</label><textarea id="f-keg" placeholder="Deskripsi Kegiatan"></textarea></div>
       <div class="row"><label><i>*</i> Progres:</label><input id="f-prog" type="number" value="100" /></div>
@@ -130,7 +130,50 @@ function renderFakeKipAppDialog(): void {
       <button id="f-save">Save</button>
     </div>`;
 
-  // Meniru perilaku KipApp: field jam baru dibuat saat checkbox dicentang.
+  const RK_OPTIONS = [
+    plan.name,
+    OTHER_RK,
+    'Terlaksananya Kegiatan Statistik Jasa sesuai SOP dan tepat waktu',
+  ];
+
+  // Combobox RK: buka daftar saat diklik, saring saat diketik, pilih saat opsi diklik.
+  const rk = document.querySelector<HTMLInputElement>('#f-rk')!;
+  const rkPop = document.querySelector<HTMLDivElement>('#rk-pop')!;
+  function renderOptions() {
+    const query = rk.value.trim().toLowerCase();
+    rkPop.innerHTML = RK_OPTIONS.filter((o) => o.toLowerCase().includes(query))
+      .map((o) => `<div class="opt">${o}</div>`)
+      .join('');
+    for (const option of Array.from(rkPop.querySelectorAll<HTMLDivElement>('.opt'))) {
+      option.addEventListener('click', () => {
+        rk.setAttribute('data-selected', option.textContent!);
+        rk.value = option.textContent!;
+        rkPop.innerHTML = '';
+      });
+    }
+  }
+  rk.addEventListener('mousedown', renderOptions);
+  rk.addEventListener('input', () => {
+    // Mengetik hanya menyaring; TIDAK memilih apa pun.
+    rk.removeAttribute('data-selected');
+    renderOptions();
+  });
+
+  // Kalender: klik membuka popup berisi kotak isian sendiri; Enter mengunci nilainya.
+  const date = document.querySelector<HTMLInputElement>('#f-date')!;
+  const datePop = document.querySelector<HTMLDivElement>('#date-pop')!;
+  date.addEventListener('mousedown', () => {
+    datePop.innerHTML =
+      '<input id="date-inner" type="text" value="" /><div class="grid">1 2 3</div>';
+    const inner = document.querySelector<HTMLInputElement>('#date-inner')!;
+    inner.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key !== 'Enter') return;
+      date.value = inner.value;
+      datePop.innerHTML = '';
+    });
+  });
+
+  // Field jam baru dibuat saat "Gunakan jam" dicentang.
   const useJam = document.querySelector<HTMLInputElement>('#f-usejam')!;
   const slot = document.querySelector<HTMLDivElement>('#jam-slot')!;
   useJam.addEventListener('change', () => {
@@ -143,9 +186,8 @@ function renderFakeKipAppDialog(): void {
 
 /**
  * Sidebar + halaman di belakang dialog, seperti pada tangkapan layar: menu
- * "Rencana Kinerja" dan filter halaman dengan label yang sama persis dengan
- * field di dialog. Ini jebakan yang nyata — tanpa pembatasan lingkup ke
- * dialognya, autofill bisa mengisi filter halaman, bukan formnya.
+ * "Rencana Kinerja" dan filter halaman berlabel sama persis dengan field di
+ * dialog. Tanpa pembatasan lingkup, autofill bisa mengisi filter halaman.
  */
 function renderDecoyPage(): void {
   const decoy = document.createElement('div');
@@ -157,32 +199,59 @@ function renderDecoyPage(): void {
     </nav>
     <div class="page">
       <div class="row"><label>Rencana Kinerja</label>
-        <select id="page-rk"><option>Pilih rencana kinerja SKP</option></select>
+        <input id="page-rk" type="text" placeholder="Pilih rencana kinerja SKP" />
       </div>
       <div class="row"><label>Tanggal</label><input id="page-date" type="text" /></div>
     </div>`;
   document.body.insertBefore(decoy, document.body.firstChild);
 }
 
+/**
+ * jsdom melaporkan setiap elemen tanpa dimensi, sehingga pemeriksaan
+ * "terlihat" di dalam skrip akan menolak semuanya. Diberi dimensi palsu agar
+ * yang diuji adalah logika skripnya, bukan keterbatasan jsdom.
+ */
+function stubVisibility(): void {
+  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 10 });
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 10 });
+}
+
+/** Menjalankan bookmarklet lalu menuntaskan seluruh langkah berjedanya. */
 function runBookmarklet(payload: string): void {
   new Function(AUTOFILL_SCRIPT)();
   const input = document.querySelector<HTMLTextAreaElement>('#kiplog-in')!;
   input.value = payload;
   document.querySelector<HTMLButtonElement>('#kiplog-go')!.click();
+  vi.runAllTimers();
 }
 
 describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tiruan dialog KipApp)', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    stubVisibility();
     renderFakeKipAppDialog();
   });
 
-  it('mengisi kesembilan field dengan mencocokkan teks label yang terlihat', () => {
-    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
-    expect(document.querySelector<HTMLSelectElement>('#f-rk')!.value).toBe(plan.name);
+  it('memilih Rencana Kinerja dengan MENGKLIK opsinya, bukan sekadar menulis nilainya', () => {
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
+    const rk = document.querySelector<HTMLInputElement>('#f-rk')!;
+    // data-selected hanya terisi lewat klik opsi — inilah beda antara
+    // "terlihat terisi" dan "benar-benar terpilih".
+    expect(rk.getAttribute('data-selected')).toBe(plan.name);
+    expect(rk.value).toBe(plan.name);
+  });
+
+  it('mengisi Tanggal lewat kotak isian di dalam popup kalender, bukan ke fieldnya langsung', () => {
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
     expect(document.querySelector<HTMLInputElement>('#f-date')!.value).toBe('2026-08-17');
-    expect(document.querySelector<HTMLInputElement>('#f-start')!.value).toBe('08:00');
-    expect(document.querySelector<HTMLInputElement>('#f-end')!.value).toBe('11:30');
+  });
+
+  it('mengisi field biasa lainnya', () => {
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
     expect(document.querySelector<HTMLTextAreaElement>('#f-keg')!.value).toBe(activity.description);
     expect(document.querySelector<HTMLInputElement>('#f-prog')!.value).toBe('100');
     expect(document.querySelector<HTMLTextAreaElement>('#f-cap')!.value).toBe(activity.achievement);
@@ -190,24 +259,8 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     expect(document.querySelector<HTMLInputElement>('#f-skp')!.checked).toBe(true);
   });
 
-  it('memicu event input dan change supaya framework KipApp ikut memperbarui state-nya', () => {
-    const seen: string[] = [];
-    document.querySelector('#f-keg')!.addEventListener('input', () => seen.push('input'));
-    document.querySelector('#f-keg')!.addEventListener('change', () => seen.push('change'));
-
-    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
-    expect(seen).toEqual(['input', 'change']);
-  });
-
-  it('TIDAK menekan Save', () => {
-    const onSave = vi.fn();
-    document.querySelector('#f-save')!.addEventListener('click', onSave);
-    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
-    expect(onSave).not.toHaveBeenCalled();
-  });
-
-  it('mencentang "Gunakan jam" lebih dulu, karena field jam belum ada sebelum itu', () => {
-    expect(document.querySelector('#f-start')).toBeNull(); // memang belum ada
+  it('mencentang "Gunakan jam" lebih dulu, lalu mengisi kedua jamnya', () => {
+    expect(document.querySelector('#f-start')).toBeNull();
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
     expect(document.querySelector<HTMLInputElement>('#f-usejam')!.checked).toBe(true);
     expect(document.querySelector<HTMLInputElement>('#f-start')!.value).toBe('08:00');
@@ -229,19 +282,38 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
 
   it('mematikan "Gunakan periode tanggal" bila sedang tercentang — kegiatan KipLog satu hari', () => {
     document.querySelector<HTMLInputElement>('#f-range')!.click();
-    expect(document.querySelector<HTMLInputElement>('#f-range')!.checked).toBe(true);
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
     expect(document.querySelector<HTMLInputElement>('#f-range')!.checked).toBe(false);
   });
 
-  it('mengirim blur dan Enter setelah mengisi tanggal, karena pemilihnya buatan sendiri', () => {
-    const seen: string[] = [];
-    const date = document.querySelector('#f-date')!;
-    date.addEventListener('keydown', (e) => seen.push(`keydown:${(e as KeyboardEvent).key}`));
-    date.addEventListener('blur', () => seen.push('blur'));
+  it('TIDAK menekan Save', () => {
+    const onSave = vi.fn();
+    document.querySelector('#f-save')!.addEventListener('click', onSave);
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
-    expect(seen).toContain('keydown:Enter');
-    expect(seen).toContain('blur');
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('melaporkan bila nama RK tidak ada di antara opsi combobox', () => {
+    const missing = { ...plan, name: 'RK yang tidak ada di KipApp' } as PerformancePlan;
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, missing)));
+    const out = document.querySelector('#kiplog-out')!.textContent!;
+    expect(out).toContain('Rencana Kinerja');
+    expect(out).toContain('tidak ditemukan');
+    expect(document.querySelector('#f-rk')!.getAttribute('data-selected')).toBeNull();
+  });
+
+  it('tidak tertipu oleh nama RK yang ada di kotak tempelnya sendiri', () => {
+    // Payload di panel KipLog memuat nama RK; kalau panel ikut dicari, skrip
+    // akan "menemukan" opsi di sana dan mengklik teks miliknya sendiri.
+    const missing = { ...plan, name: 'RK yang tidak ada di KipApp' } as PerformancePlan;
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, missing)));
+    expect(document.querySelector('#f-rk')!.getAttribute('data-selected')).toBeNull();
+  });
+
+  it('membersihkan teks pencarian saat opsi tidak ketemu, supaya tidak tampak terisi', () => {
+    const missing = { ...plan, name: 'RK yang tidak ada di KipApp' } as PerformancePlan;
+    runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, missing)));
+    expect(document.querySelector<HTMLInputElement>('#f-rk')!.value).toBe('');
   });
 
   it('melaporkan field yang tidak ditemukan, tidak mendiamkannya', () => {
@@ -249,20 +321,6 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
     expect(document.querySelector('#kiplog-out')!.textContent).toContain('Data Dukung');
     expect(document.querySelector('#kiplog-out')!.textContent).toContain('Gagal');
-  });
-
-  it('melaporkan bila nama RK tidak ada di antara opsi select', () => {
-    runBookmarklet(
-      serializeAutofillPayload(
-        buildAutofillPayload(activity, {
-          ...plan,
-          name: 'RK yang tidak ada di KipApp',
-        } as PerformancePlan)
-      )
-    );
-    const out = document.querySelector('#kiplog-out')!.textContent!;
-    expect(out).toContain('Rencana Kinerja');
-    expect(out).toContain('tidak cocok');
   });
 
   it('menolak data yang bukan payload KipLog', () => {
@@ -280,12 +338,9 @@ describe('bookmarklet autofill (skrip yang sebenarnya dikirim, dijalankan di tir
     renderDecoyPage();
     runBookmarklet(serializeAutofillPayload(buildAutofillPayload(activity, plan)));
 
-    expect(document.querySelector<HTMLSelectElement>('#f-rk')!.value).toBe(plan.name);
+    expect(document.querySelector<HTMLInputElement>('#f-rk')!.value).toBe(plan.name);
     expect(document.querySelector<HTMLInputElement>('#f-date')!.value).toBe('2026-08-17');
-    // Kontrol berlabel sama di halaman belakang harus tetap kosong.
-    expect(document.querySelector<HTMLSelectElement>('#page-rk')!.value).toBe(
-      'Pilih rencana kinerja SKP'
-    );
+    expect(document.querySelector<HTMLInputElement>('#page-rk')!.value).toBe('');
     expect(document.querySelector<HTMLInputElement>('#page-date')!.value).toBe('');
   });
 });

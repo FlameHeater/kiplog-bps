@@ -106,10 +106,15 @@ untuk Autofill" di KipLog → klik bookmarklet di tab KipApp → tempel → "Isi
 Form" → **Anda** yang menekan Save.
 
 Label, urutan, dan jenis kontrol field diambil dari tangkapan layar dialog itu
-di `Panduan KipApp - Pengguna V.3.1.pdf` halaman 66, lalu **dikoreksi terhadap
-tangkapan layar form sungguhan KipApp v2.0.4 (2026)**. Panduan itu bertanggal
-2022 dan formnya sudah berubah: ada dua checkbox baru, dan Jam Mulai/Jam
-Selesai tidak ada di halaman sampai "Gunakan jam" dicentang.
+di `Panduan KipApp - Pengguna V.3.1.pdf` halaman 66, lalu dikoreksi dua kali:
+terhadap tangkapan layar form sungguhan KipApp v2.0.4 (2026), dan terhadap
+hasil percobaan langsung pengguna. Panduan 2022 sudah tidak menggambarkan
+formnya: ada dua checkbox baru, Jam Mulai/Jam Selesai tidak ada di halaman
+sampai "Gunakan jam" dicentang, dan yang terpenting **Rencana Kinerja serta
+Tanggal bukan kontrol HTML biasa** melainkan komponen popup — RK harus diklik
+opsinya setelah dicari, Tanggal diisi lewat kotak isian di dalam kalendernya.
+Karena popup itu baru muncul setelah diklik, pengisian berjalan bertahap dan
+perlu beberapa detik.
 
 Batasnya, dan ini disengaja:
 
