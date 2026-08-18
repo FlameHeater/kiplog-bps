@@ -51,7 +51,9 @@ function PlanRow({
       <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
         {plan.type}
       </span>
-      {selected ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /> : null}
+      {selected ? (
+        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+      ) : null}
     </button>
   );
 }
@@ -98,7 +100,13 @@ export function RkCombobox({ value, onChange, open: openProp, onOpenChange }: Rk
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    /*
+      `modal` wajib di sini: combobox ini hidup di dalam dialog Kegiatan, dan
+      tanpa itu putaran roda tetikus di atas daftar diteruskan ke dialog di
+      belakangnya — dialognya yang tergulir, daftarnya tidak, sehingga daftar
+      RK tampak tidak bisa digulir sama sekali.
+    */
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -108,7 +116,7 @@ export function RkCombobox({ value, onChange, open: openProp, onOpenChange }: Rk
         >
           <span className="truncate">
             {selectedPlan
-              ? selectedPlan.displayName ?? selectedPlan.name
+              ? (selectedPlan.displayName ?? selectedPlan.name)
               : 'Pilih Rencana Kinerja…'}
           </span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
@@ -122,7 +130,10 @@ export function RkCombobox({ value, onChange, open: openProp, onOpenChange }: Rk
           onChange={(e) => setQuery(e.target.value)}
           className="mb-2"
         />
-        <div className="max-h-80 space-y-3 overflow-y-auto">
+        <div
+          className="max-h-80 space-y-3 overflow-y-auto overscroll-contain"
+          onWheel={(e) => e.stopPropagation()}
+        >
           {searchResults ? (
             searchResults.length > 0 ? (
               searchResults.map((plan) => (
@@ -144,23 +155,42 @@ export function RkCombobox({ value, onChange, open: openProp, onOpenChange }: Rk
                 <section>
                   <p className="px-2 pb-1 text-xs font-semibold text-muted-foreground">Favorit</p>
                   {ordered.favorites.map((plan) => (
-                    <PlanRow key={plan.id} plan={plan} selected={plan.id === value} onSelect={() => handleSelect(plan.id)} />
+                    <PlanRow
+                      key={plan.id}
+                      plan={plan}
+                      selected={plan.id === value}
+                      onSelect={() => handleSelect(plan.id)}
+                    />
                   ))}
                 </section>
               ) : null}
               {ordered.recent.length > 0 ? (
                 <section>
-                  <p className="px-2 pb-1 text-xs font-semibold text-muted-foreground">Baru digunakan</p>
+                  <p className="px-2 pb-1 text-xs font-semibold text-muted-foreground">
+                    Baru digunakan
+                  </p>
                   {ordered.recent.map((plan) => (
-                    <PlanRow key={plan.id} plan={plan} selected={plan.id === value} onSelect={() => handleSelect(plan.id)} />
+                    <PlanRow
+                      key={plan.id}
+                      plan={plan}
+                      selected={plan.id === value}
+                      onSelect={() => handleSelect(plan.id)}
+                    />
                   ))}
                 </section>
               ) : null}
               {ordered.frequent.length > 0 ? (
                 <section>
-                  <p className="px-2 pb-1 text-xs font-semibold text-muted-foreground">Sering digunakan</p>
+                  <p className="px-2 pb-1 text-xs font-semibold text-muted-foreground">
+                    Sering digunakan
+                  </p>
                   {ordered.frequent.map((plan) => (
-                    <PlanRow key={plan.id} plan={plan} selected={plan.id === value} onSelect={() => handleSelect(plan.id)} />
+                    <PlanRow
+                      key={plan.id}
+                      plan={plan}
+                      selected={plan.id === value}
+                      onSelect={() => handleSelect(plan.id)}
+                    />
                   ))}
                 </section>
               ) : null}
@@ -168,7 +198,12 @@ export function RkCombobox({ value, onChange, open: openProp, onOpenChange }: Rk
                 <section key={team}>
                   <p className="px-2 pb-1 text-xs font-semibold text-muted-foreground">{team}</p>
                   {plans.map((plan) => (
-                    <PlanRow key={plan.id} plan={plan} selected={plan.id === value} onSelect={() => handleSelect(plan.id)} />
+                    <PlanRow
+                      key={plan.id}
+                      plan={plan}
+                      selected={plan.id === value}
+                      onSelect={() => handleSelect(plan.id)}
+                    />
                   ))}
                 </section>
               ))}

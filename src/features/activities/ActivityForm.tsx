@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ActivityEditFormSchema } from '@/lib/validation';
-import { RbAreaSchema } from '@/lib/validation/enums';
 import type { Activity, ActivityEditFormValues, AppSettings } from '@/types';
 import { activityRepository } from '@/db/repositories';
 import { buildActivityFromForm, calculateDurationMinutes } from '@/lib/services/activity-fields';
@@ -14,7 +13,6 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ProgressControl } from './ProgressControl';
 import { EvidenceLinkField } from './EvidenceLinkField';
-import { TagInput } from './TagInput';
 import { RkCombobox } from '@/features/performance-plans/RkCombobox';
 import { RkRecommendationPanel } from './RkRecommendationPanel';
 import { EvidenceGallery, EvidenceGalleryPlaceholder } from '@/features/evidence/EvidenceGallery';
@@ -104,6 +102,10 @@ export function ActivityForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Tag dan Area Reformasi Birokrasi dibuang dari form atas permintaan
+  // pemilik proyek. Field-nya TETAP ada di skema dan tetap ikut tersimpan apa
+  // adanya, sehingga kegiatan lama tidak kehilangan isinya dan laporan yang
+  // membacanya tidak pecah — yang hilang hanya cara mengisinya lewat form ini.
   const values = watch();
   const [noTime, setNoTime] = useState(existing ? !existing.startTime && !existing.endTime : false);
   const evidenceForChecklist = useEvidenceForActivity(savedId);
@@ -173,9 +175,20 @@ export function ActivityForm({
   // 'complete' would overstate it — that's 'draft'. Previously EVERY
   // not-ready activity landed on 'complete', so clearing core data never
   // sent a heavily-edited activity back to 'draft' the way a user expects.
-  const CORE_CONTENT_FIELDS = new Set(['date', 'startTime', 'performancePlanId', 'description', 'achievement', 'progress']);
+  const CORE_CONTENT_FIELDS = new Set([
+    'date',
+    'startTime',
+    'performancePlanId',
+    'description',
+    'achievement',
+    'progress',
+  ]);
   function withRecomputedStatus(activity: Activity): Activity {
-    if (activity.status !== 'draft' && activity.status !== 'complete' && activity.status !== 'ready_to_report') {
+    if (
+      activity.status !== 'draft' &&
+      activity.status !== 'complete' &&
+      activity.status !== 'ready_to_report'
+    ) {
       return activity;
     }
     const validation = validateReadyToReport(
@@ -209,7 +222,10 @@ export function ActivityForm({
   async function onSubmit(formValues: ActivityEditFormValues) {
     const current = await activityRepository.get(draftIdRef.current);
     const activity = withRecomputedStatus(
-      buildActivityFromForm(formValues, current ?? existing ?? ({ id: draftIdRef.current } as Activity))
+      buildActivityFromForm(
+        formValues,
+        current ?? existing ?? ({ id: draftIdRef.current } as Activity)
+      )
     );
     await activityRepository.save(activity);
     setSavedId(activity.id);
@@ -277,7 +293,9 @@ export function ActivityForm({
             <div className="space-y-1.5">
               <Label htmlFor="endTime">3. Jam selesai kegiatan</Label>
               <Input id="endTime" type="time" {...register('endTime')} />
-              {errors.endTime ? <p className="text-xs text-destructive">{errors.endTime.message}</p> : null}
+              {errors.endTime ? (
+                <p className="text-xs text-destructive">{errors.endTime.message}</p>
+              ) : null}
             </div>
           </div>
           {duration > 0 ? (
@@ -349,7 +367,10 @@ export function ActivityForm({
             disabled={!values.description.trim() || values.achievement.trim() !== ''}
             onClick={() => {
               // FR-SCG-03: only fills an empty field, never overwrites what the user typed.
-              const [suggestion] = generateAchievementSuggestions(values.description, values.progress);
+              const [suggestion] = generateAchievementSuggestions(
+                values.description,
+                values.progress
+              );
               if (suggestion) {
                 setValue('achievement', suggestion.text, { shouldDirty: true });
                 setAchievementIsSuggested(true);
@@ -407,40 +428,6 @@ export function ActivityForm({
         <Input id="location" {...register('location')} />
       </div>
 
-      <div className="space-y-1.5">
-        <Label>Tag</Label>
-        <Controller
-          control={control}
-          name="tags"
-          render={({ field }) => <TagInput value={field.value} onChange={field.onChange} />}
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label>Area Reformasi Birokrasi</Label>
-        <Controller
-          control={control}
-          name="rbAreas"
-          render={({ field }) => (
-            <div className="grid grid-cols-2 gap-2">
-              {RbAreaSchema.options.map((area) => (
-                <label key={area} className="flex items-start gap-2 text-xs">
-                  <Checkbox
-                    checked={field.value.includes(area)}
-                    onCheckedChange={(checked) =>
-                      field.onChange(
-                        checked ? [...field.value, area] : field.value.filter((a) => a !== area)
-                      )
-                    }
-                  />
-                  {area}
-                </label>
-              ))}
-            </div>
-          )}
-        />
-      </div>
-
       <ReadyToReportChecklist
         input={{
           date: values.date,
@@ -463,7 +450,18 @@ export function ActivityForm({
         }}
       />
 
-      <div className="flex gap-2 pt-2">
+      {/*
+        Tombol simpan menempel di dasar dialog, bukan ikut tergulir bersama isi
+        form. Form ini panjang — sembilan field ditambah checklist — dan tombol
+        yang hanya bisa dijangkau setelah menggulir ke ujung bawah membuat
+        pekerjaan yang paling sering dilakukan (menyimpan) jadi yang paling
+        jauh dijangkau.
+
+        `-mx-6 -mb-6 px-6 py-4` melebarkan bilahnya sampai tepi dialog supaya
+        isi form yang lewat di belakangnya benar-benar tertutup, bukan mengintip
+        di sisi kiri-kanan.
+      */}
+      <div className="sticky bottom-0 -mx-6 -mb-6 flex gap-2 border-t border-border bg-card px-6 py-4">
         <Button type="submit" disabled={isSubmitting}>
           Simpan
         </Button>
