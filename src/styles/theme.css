@@ -88,6 +88,28 @@
     --status-reported: 25 90% 38%; /* oranye */
     --status-archived: 215 15% 42%; /* abu-abu */
 
+    /*
+     * Kotak tanggal kalender yang sudah terisi kegiatan.
+     *
+     * Sengaja TIDAK memakai --primary: warna aksen bisa diganti pengguna di
+     * Pengaturan > Tampilan (lima pilihan, termasuk oranye), sedangkan "hari
+     * ini sudah ada isinya" harus terbaca sama di semua aksen. Navy dipilih
+     * pemilik proyek dan dikunci di sini.
+     *
+     * Teks putih di atas navy ini 9,9:1 — jauh di atas ambang AA (NFR-09).
+     *
+     * Titik penanda di dalam kotak memakai palet terang tersendiri: warna
+     * status yang biasa (hijau tua --success, oranye --warning) nyaris hilang
+     * di atas navy. Titik hanya muncul saat kotaknya terisi, jadi latarnya
+     * selalu navy dan palet ini tidak perlu versi gelap sendiri.
+     */
+    --calendar-filled: 217 60% 30%;
+    --calendar-filled-foreground: 0 0% 100%;
+    --calendar-dot-complete: 142 60% 68%;
+    --calendar-dot-draft: 217 30% 80%;
+    --calendar-dot-attention: 40 95% 65%;
+    --calendar-dot-alert: 0 90% 78%;
+
     --border: 214 32% 91%;
     --input: 214 32% 91%;
     --ring: 222 47% 11%;
@@ -184,6 +206,10 @@
     --status-ready: 152 55% 52%;
     --status-reported: 25 95% 62%;
     --status-archived: 215 15% 65%;
+
+    /* Navy dinaikkan lightness-nya supaya tetap terpisah dari latar gelap;
+       teks putih di atasnya masih 8,5:1. Palet titiknya tidak diubah. */
+    --calendar-filled: 217 55% 34%;
 
     --border: 217 33% 20%;
     --input: 217 33% 20%;

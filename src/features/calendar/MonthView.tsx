@@ -61,6 +61,11 @@ export function MonthView({ year, month, activities, config, selectedDate, onSel
           const isToday = date === today;
           const isSelected = date === selectedDate;
           const isWeekendOrHoliday = !indicator.isWorkday;
+          // Tanggal yang sudah ada kegiatannya diberi latar navy penuh supaya
+          // terbaca sekilas dari seberang grid — titik kecil 6px sebelumnya
+          // menuntut pembaca memeriksa satu per satu. Kegiatan berstatus arsip
+          // tidak dihitung (lihat computeDayIndicator), sama seperti titiknya.
+          const isFilled = indicator.activityCount > 0;
 
           const summary = summarize(indicator);
 
@@ -74,8 +79,12 @@ export function MonthView({ year, month, activities, config, selectedDate, onSel
               className={cn(
                 'flex aspect-square flex-col items-center justify-center rounded-control border text-sm',
                 isWeekendOrHoliday ? 'bg-muted/40 text-muted-foreground' : 'bg-background',
+                // Sesudah kelas akhir pekan, supaya isian menang atas keduanya:
+                // hari Sabtu yang ada kegiatannya tetap tampil terisi.
+                isFilled && 'bg-calendar-filled text-calendar-filled-foreground',
                 indicator.isPastWorkdayEmpty && 'border-dashed border-warning',
                 !indicator.isPastWorkdayEmpty && 'border-border',
+                isFilled && 'border-calendar-filled',
                 isSelected && 'ring-2 ring-primary',
                 isToday && 'font-bold ring-2 ring-foreground'
               )}
@@ -86,15 +95,18 @@ export function MonthView({ year, month, activities, config, selectedDate, onSel
                   <span
                     className={cn(
                       'h-1.5 w-1.5 rounded-full',
-                      indicator.allCompleteWithLink && 'bg-success',
-                      !indicator.allCompleteWithLink && indicator.hasDraft && 'bg-muted-foreground',
-                      !indicator.allCompleteWithLink && !indicator.hasDraft && indicator.hasLowProgress && 'bg-warning'
+                      indicator.allCompleteWithLink && 'bg-calendar-dot-complete',
+                      !indicator.allCompleteWithLink && indicator.hasDraft && 'bg-calendar-dot-draft',
+                      !indicator.allCompleteWithLink &&
+                        !indicator.hasDraft &&
+                        indicator.hasLowProgress &&
+                        'bg-calendar-dot-attention'
                     )}
                     aria-hidden="true"
                   />
                 ) : null}
                 {indicator.hasNoEvidenceLink && indicator.activityCount > 0 ? (
-                  <span className="text-[9px] text-destructive" aria-hidden="true">
+                  <span className="text-[9px] text-calendar-dot-alert" aria-hidden="true">
                     ⛓
                   </span>
                 ) : null}

@@ -44,6 +44,13 @@ export default {
         'status-ready': 'hsl(var(--status-ready))',
         'status-reported': 'hsl(var(--status-reported))',
         'status-archived': 'hsl(var(--status-archived))',
+        // Kotak tanggal kalender yang sudah ada kegiatannya.
+        'calendar-filled': 'hsl(var(--calendar-filled))',
+        'calendar-filled-foreground': 'hsl(var(--calendar-filled-foreground))',
+        'calendar-dot-complete': 'hsl(var(--calendar-dot-complete))',
+        'calendar-dot-draft': 'hsl(var(--calendar-dot-draft))',
+        'calendar-dot-attention': 'hsl(var(--calendar-dot-attention))',
+        'calendar-dot-alert': 'hsl(var(--calendar-dot-alert))',
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
