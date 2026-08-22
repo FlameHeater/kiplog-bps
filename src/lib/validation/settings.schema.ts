@@ -14,7 +14,7 @@ export const AppSettingsSchema = z.object({
   defaultEndTime: TimeStringSchema.default('16:00'),
   defaultCountsTowardSkp: z.boolean().default(true),
   theme: z.enum(['light', 'dark', 'system']).default('system'),
-  accentColor: z.enum(['navy', 'teal', 'indigo', 'emerald', 'orange']).default('navy'),
+  accentColor: z.enum(['navy', 'teal', 'indigo', 'emerald', 'orange', 'gold']).default('navy'),
   // Logo aplikasi, menggantikan mark bawaan di sidebar. Ditaruh di pengaturan,
   // bukan di profil, karena ini soal tampilan aplikasi — bukan identitas orang
   // yang memakainya.

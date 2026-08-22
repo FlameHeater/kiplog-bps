@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { CalendarCheck2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { ActivityCard } from '@/features/activities/ActivityCard';
@@ -38,10 +38,15 @@ export function DayPanel({ date, activities }: DayPanelProps) {
 
   return (
     <div className="animate-page rounded-card border border-border bg-card p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <p className="text-xs text-muted-foreground">{formatIndonesianWeekday(date)}</p>
-          <h3 className="text-sm font-semibold">{formatIndonesianDate(date)}</h3>
+      <div className="mb-3 flex items-center justify-between border-b border-border pb-3">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-primary/10 text-primary">
+            <CalendarCheck2 className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="text-xs text-muted-foreground">{formatIndonesianWeekday(date)}</p>
+            <h3 className="text-sm font-semibold">{formatIndonesianDate(date)}</h3>
+          </div>
         </div>
         <Button size="sm" onClick={() => openNew(date)}>
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />

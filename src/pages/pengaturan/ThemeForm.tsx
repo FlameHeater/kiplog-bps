@@ -24,6 +24,7 @@ const ACCENT_OPTIONS = [
   { value: 'indigo', label: 'Indigo', hex: '#4338ca' },
   { value: 'emerald', label: 'Emerald', hex: '#047857' },
   { value: 'orange', label: 'Oranye', hex: '#c2410c' },
+  { value: 'gold', label: 'Emas', hex: '#a16207' },
 ] as const;
 
 // Fitur "kebebasan custom tampilan" — mode terang/gelap/otomatis + warna

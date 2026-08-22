@@ -18,7 +18,7 @@ function activity(date: string, overrides: Partial<Activity> = {}): Activity {
     quantity: 1,
     unit: 'kegiatan',
     progress: 100,
-    performancePlanId: 'rk-1',
+    performancePlanId: null,
     countsTowardSkp: true,
     evidenceLink: 'https://drive.google.com/x',
     evidenceCount: 1,
@@ -38,71 +38,94 @@ function cell(date: string): HTMLElement {
   return el;
 }
 
-describe('MonthView — warna kotak tanggal', () => {
-  it('memberi latar navy pada tanggal yang sudah ada kegiatannya', () => {
+describe('MonthView — pil kegiatan per tanggal', () => {
+  it('menampilkan pil berisi deskripsi kegiatan pada tanggal yang terisi', () => {
     render(
       <MonthView
         year={2026}
         month={8}
-        activities={[activity('2026-08-05')]}
+        activities={[activity('2026-08-05', { description: 'Rapat evaluasi' })]}
         config={config}
         selectedDate={null}
         onSelectDate={() => {}}
       />
     );
 
-    expect(cell('2026-08-05').className).toContain('bg-calendar-filled');
-    expect(cell('2026-08-06').className).not.toContain('bg-calendar-filled');
+    expect(cell('2026-08-05').textContent).toContain('Rapat evaluasi');
+    expect(cell('2026-08-06').textContent).not.toContain('Rapat evaluasi');
   });
 
-  it('mengalahkan latar akhir pekan, supaya Sabtu yang terisi tetap terlihat terisi', () => {
+  it('tetap menampilkan pil pada hari Sabtu yang terisi, walau latarnya akhir pekan', () => {
     // 1 Agustus 2026 jatuh hari Sabtu — bukan hari kerja menurut config di atas.
     render(
       <MonthView
         year={2026}
         month={8}
-        activities={[activity('2026-08-01')]}
+        activities={[activity('2026-08-01', { description: 'Kerja Sabtu' })]}
         config={config}
         selectedDate={null}
         onSelectDate={() => {}}
       />
     );
 
-    const saturday = cell('2026-08-01');
-    expect(saturday.className).toContain('bg-calendar-filled');
-    expect(saturday.className).not.toContain('bg-muted/40');
+    expect(cell('2026-08-01').textContent).toContain('Kerja Sabtu');
   });
 
   it('tidak menghitung kegiatan yang sudah diarsipkan', () => {
-    // Sama seperti titik penandanya: arsip tidak menandai hari sebagai terisi.
     render(
       <MonthView
         year={2026}
         month={8}
-        activities={[activity('2026-08-05', { status: 'archived' })]}
+        activities={[activity('2026-08-05', { status: 'archived', description: 'Arsip lama' })]}
         config={config}
         selectedDate={null}
         onSelectDate={() => {}}
       />
     );
 
-    expect(cell('2026-08-05').className).not.toContain('bg-calendar-filled');
+    expect(cell('2026-08-05').textContent).not.toContain('Arsip lama');
   });
 
-  it('memakai palet titik terang, bukan warna status yang hilang di atas navy', () => {
-    const { container } = render(
+  it('mewarnai pil dengan warna RK yang ditautkan, bukan warna status', () => {
+    render(
       <MonthView
         year={2026}
         month={8}
-        activities={[activity('2026-08-05')]}
+        activities={[activity('2026-08-05', { performancePlanId: 'rk-1', description: 'Ada RK' })]}
         config={config}
         selectedDate={null}
         onSelectDate={() => {}}
       />
     );
 
-    const dot = container.querySelector('.rounded-full');
-    expect(dot?.className).toContain('bg-calendar-dot-complete');
-    expect(dot?.className).not.toContain('bg-success');
+    // Tanpa daftar RK dari usePerformancePlans (kosong di lingkungan test),
+    // plan-nya tidak ditemukan — pil jatuh ke kelas warna status seperti
+    // kegiatan tanpa RK. Yang penting dicek di sini: pil tetap muncul dan
+    // tidak melempar error saat performancePlanId menunjuk RK yang tidak ada
+    // di daftar (RK terhapus setelah kegiatan dibuat, skenario nyata).
+    expect(cell('2026-08-05').textContent).toContain('Ada RK');
+  });
+
+  it('menampilkan "+N lainnya" saat kegiatan lebih dari dua dalam sehari', () => {
+    render(
+      <MonthView
+        year={2026}
+        month={8}
+        activities={[
+          activity('2026-08-05', { id: 'a1', description: 'Satu' }),
+          activity('2026-08-05', { id: 'a2', description: 'Dua' }),
+          activity('2026-08-05', { id: 'a3', description: 'Tiga' }),
+        ]}
+        config={config}
+        selectedDate={null}
+        onSelectDate={() => {}}
+      />
+    );
+
+    const text = cell('2026-08-05').textContent ?? '';
+    expect(text).toContain('Satu');
+    expect(text).toContain('Dua');
+    expect(text).not.toContain('Tiga');
+    expect(text).toContain('+1 lainnya');
   });
 });

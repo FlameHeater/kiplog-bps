@@ -179,6 +179,20 @@
     --ring: 27 96% 61%;
   }
 
+  /* 6th accent added at the user's request, matching a reference mockup's
+     dark+gold look — combined with dark mode this gets close to that
+     reference without introducing a separate always-dark-sidebar mode. */
+  [data-accent='gold'] {
+    --primary: 35 92% 33%; /* #a16207 */
+    --primary-foreground: 0 0% 100%;
+    --ring: 35 92% 33%;
+  }
+  .dark[data-accent='gold'] {
+    --primary: 48 96% 53%; /* #facc15 */
+    --primary-foreground: 222 47% 11%;
+    --ring: 48 96% 53%;
+  }
+
   .dark {
     --background: 222 47% 8%;
     --foreground: 210 40% 96%;
