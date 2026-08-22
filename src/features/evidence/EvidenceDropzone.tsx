@@ -8,19 +8,17 @@ interface EvidenceDropzoneProps {
   maxFileSizeMb: number;
   autoCompressImages: boolean;
   compact?: boolean;
-  /** Listen for paste anywhere on the page (Evidence Inbox), not just when
-   * this dropzone has focus (Activity form, where other fields also want paste). */
-  globalPaste?: boolean;
 }
 
-// FR-EVD-02: drag & drop, browse button, and Ctrl+V clipboard paste (screenshots).
-export function EvidenceDropzone({
-  activityId,
-  maxFileSizeMb,
-  autoCompressImages,
-  compact,
-  globalPaste,
-}: EvidenceDropzoneProps) {
+// FR-EVD-02: drag & drop, browse button, and Ctrl+V clipboard paste
+// (screenshots). Paste always works anywhere on the page the moment this
+// mounts — it used to require first clicking the dropzone to give it focus,
+// but clicking it opens the native file picker instead, so there was no way
+// to "focus" it without also derailing into file-explorer. Safe to listen
+// unconditionally: this only acts when the clipboard actually contains
+// files (e.dataTransfer/clipboardData.files), never on plain text, so it
+// can't steal a paste meant for a text field elsewhere on the page.
+export function EvidenceDropzone({ activityId, maxFileSizeMb, autoCompressImages, compact }: EvidenceDropzoneProps) {
   const { queue, uploadFiles, dismissItem } = useEvidenceUploadQueue({
     activityId,
     maxFileSizeMb,
@@ -28,26 +26,19 @@ export function EvidenceDropzone({
   });
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handlePaste(e: ClipboardEvent) {
-      if (!globalPaste) {
-        const container = containerRef.current;
-        if (!container || !document.activeElement || !container.contains(document.activeElement)) {
-          return;
-        }
-      }
       const files = Array.from(e.clipboardData?.files ?? []);
       if (files.length > 0) uploadFiles(files);
     }
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [globalPaste]);
+  }, []);
 
   return (
-    <div ref={containerRef} tabIndex={-1}>
+    <div>
       <div
         role="button"
         tabIndex={0}

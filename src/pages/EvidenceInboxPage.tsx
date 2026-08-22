@@ -86,7 +86,6 @@ export function EvidenceInboxPage() {
         activityId={null}
         maxFileSizeMb={settings?.maxFileSizeMb ?? 10}
         autoCompressImages={settings?.autoCompressImages ?? true}
-        globalPaste
       />
 
       <div className="my-4 flex gap-1 rounded-control border border-border p-1 w-fit">
