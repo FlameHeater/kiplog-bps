@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Link2Off } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { computeDayIndicator } from '@/lib/services/calendar-indicators';
 import { todayString } from '@/lib/date/date-utils';
@@ -47,13 +48,13 @@ export function MonthView({ year, month, activities, config, selectedDate, onSel
   }, [year, month]);
 
   return (
-    <div>
-      <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">
+    <div className="animate-page">
+      <div className="grid grid-cols-7 gap-1.5 text-center text-xs font-medium text-muted-foreground">
         {WEEKDAY_HEADERS.map((label) => (
           <div key={label}>{label}</div>
         ))}
       </div>
-      <div className="mt-1 grid grid-cols-7 gap-1">
+      <div className="mt-1.5 grid grid-cols-7 gap-1.5">
         {cells.map((date, i) => {
           if (!date) return <div key={`blank-${i}`} />;
           const dayActivities = activitiesByDate.get(date) ?? [];
@@ -77,24 +78,29 @@ export function MonthView({ year, month, activities, config, selectedDate, onSel
               aria-label={`${date}: ${summary}`}
               title={summary}
               className={cn(
-                'flex aspect-square flex-col items-center justify-center rounded-control border text-sm',
+                'group flex aspect-square flex-col items-center justify-center gap-0.5 rounded-card border text-sm',
+                'transition-all duration-150 ease-out hover:-translate-y-0.5 hover:shadow-elevation-1 active:translate-y-0 active:scale-[0.96]',
                 isWeekendOrHoliday ? 'bg-muted/40 text-muted-foreground' : 'bg-background',
                 // Sesudah kelas akhir pekan, supaya isian menang atas keduanya:
                 // hari Sabtu yang ada kegiatannya tetap tampil terisi.
-                isFilled && 'bg-calendar-filled text-calendar-filled-foreground',
+                isFilled && 'bg-calendar-filled text-calendar-filled-foreground shadow-elevation-1 hover:shadow-elevation-glow',
                 indicator.isPastWorkdayEmpty && 'border-dashed border-warning',
                 !indicator.isPastWorkdayEmpty && 'border-border',
                 isFilled && 'border-calendar-filled',
-                isSelected && 'ring-2 ring-primary',
-                isToday && 'font-bold ring-2 ring-foreground'
+                // Ring (selected) dan garis-bawah (hari ini) memakai properti
+                // CSS berbeda supaya keduanya tetap terlihat sekaligus saat
+                // hari ini sedang dipilih — sebelumnya sama-sama memakai
+                // `ring`, jadi salah satu diam-diam kalah lewat tailwind-merge.
+                isSelected && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
+                isToday && 'font-bold underline decoration-2 underline-offset-[3px]'
               )}
             >
               <span>{Number(date.slice(-2))}</span>
-              <span className="mt-0.5 flex items-center gap-0.5">
+              <span className="flex items-center gap-0.5">
                 {indicator.activityCount > 0 ? (
                   <span
                     className={cn(
-                      'h-1.5 w-1.5 rounded-full',
+                      'h-1.5 w-1.5 rounded-full transition-transform duration-150 group-hover:scale-125',
                       indicator.allCompleteWithLink && 'bg-calendar-dot-complete',
                       !indicator.allCompleteWithLink && indicator.hasDraft && 'bg-calendar-dot-draft',
                       !indicator.allCompleteWithLink &&
@@ -106,9 +112,7 @@ export function MonthView({ year, month, activities, config, selectedDate, onSel
                   />
                 ) : null}
                 {indicator.hasNoEvidenceLink && indicator.activityCount > 0 ? (
-                  <span className="text-[9px] text-calendar-dot-alert" aria-hidden="true">
-                    ⛓
-                  </span>
+                  <Link2Off className="h-2.5 w-2.5 text-calendar-dot-alert" aria-hidden="true" />
                 ) : null}
               </span>
             </button>

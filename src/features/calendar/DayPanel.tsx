@@ -10,6 +10,7 @@ import { duplicateActivity } from '@/lib/services/duplicate-activity';
 import { activityRepository, evidenceRepository } from '@/db/repositories';
 import { usePerformancePlans } from '@/hooks/usePerformancePlans';
 import { useSettings } from '@/hooks/useSettings';
+import { formatIndonesianDate, formatIndonesianWeekday } from '@/lib/date/date-utils';
 import type { Activity } from '@/types';
 
 interface DayPanelProps {
@@ -36,9 +37,12 @@ export function DayPanel({ date, activities }: DayPanelProps) {
   }
 
   return (
-    <div className="rounded-card border border-border bg-card p-4">
+    <div className="animate-page rounded-card border border-border bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">{date}</h3>
+        <div>
+          <p className="text-xs text-muted-foreground">{formatIndonesianWeekday(date)}</p>
+          <h3 className="text-sm font-semibold">{formatIndonesianDate(date)}</h3>
+        </div>
         <Button size="sm" onClick={() => openNew(date)}>
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           Tambah

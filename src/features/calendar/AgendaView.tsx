@@ -53,7 +53,7 @@ export function AgendaView({ year, month, activities, config, selectedDate, onSe
             type="button"
             onClick={() => onSelectDate(date)}
             className={cn(
-              'flex w-full items-center gap-3 px-4 py-3 text-left',
+              'flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-accent/60',
               isSelected && 'bg-accent',
               !indicator.isWorkday && 'bg-muted/30'
             )}

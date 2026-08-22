@@ -114,7 +114,7 @@ export function KalenderPage() {
                 onSelectDate={setSelectedDate}
               />
             </div>
-            {selectedDate ? <DayPanel date={selectedDate} activities={dayActivities} /> : null}
+            {selectedDate ? <DayPanel key={selectedDate} date={selectedDate} activities={dayActivities} /> : null}
           </div>
         </>
       ) : null}
@@ -127,7 +127,7 @@ export function KalenderPage() {
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
           />
-          {selectedDate ? <DayPanel date={selectedDate} activities={dayActivities} /> : null}
+          {selectedDate ? <DayPanel key={selectedDate} date={selectedDate} activities={dayActivities} /> : null}
         </div>
       ) : null}
 
@@ -152,7 +152,7 @@ export function KalenderPage() {
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <DayPanel date={selectedDate ?? today} activities={dayActivities} />
+          <DayPanel key={selectedDate ?? today} date={selectedDate ?? today} activities={dayActivities} />
         </div>
       ) : null}
     </div>
