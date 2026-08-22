@@ -73,20 +73,29 @@
     --info: 199 89% 41%; /* #0284c7 */
 
     /*
-     * Warna status kegiatan, ditetapkan pemilik proyek.
+     * Warna status kegiatan (revisi kontras — permintaan eksplisit pengguna
+     * menggantikan palet lama).
      *
-     * Nilai lightness-nya dipilih supaya teks berwarna ini tetap terbaca di
-     * atas latar terang (NFR-09, WCAG AA 4.5:1) — kuning dan hijau muda murni
-     * gagal telak di situ, jadi keduanya digelapkan secukupnya sambil tetap
-     * dikenali sebagai kuning dan hijau muda. Latar kartu memakai token yang
-     * sama dengan opasitas rendah, sehingga rona kartu dan warna teksnya tidak
-     * pernah bergeser satu sama lain.
+     * Palet sebelumnya (kuning 45°, oranye 25°, hijau muda 120°, hijau tua
+     * 152°) menumpuk dua pasang rona yang cuma 20-32° terpisah di roda warna —
+     * pada garis aksen 4px yang digelapkan untuk kontras teks, draft/dilaporkan
+     * dan lengkap/siap-lapor jadi sama-sama terbaca "coklat kemerahan" dan
+     * "hijau pudar", nyaris tak terpisah sekilas pandang. Diganti lima rona
+     * kategorial yang sengaja direntangkan >60° satu sama lain (amber, biru,
+     * zamrud, ungu, abu-abu netral) — pola palet kategorial standar (mis.
+     * ColorBrewer/Tableau) yang memang dirancang supaya tak ada dua kategori
+     * yang tertukar, bukan gradasi bertetangga.
+     *
+     * Lightness tetap dijaga lolos WCAG AA (4.5:1) sebagai teks di atas kartu
+     * putih (mode terang) dan di atas kartu navy gelap (mode gelap) — metode
+     * sama seperti token lain di berkas ini. Warna BUKAN satu-satunya penanda:
+     * tiap kartu tetap menampilkan nama statusnya sebagai teks pada badge.
      */
-    --status-draft: 45 93% 30%; /* kuning */
-    --status-complete: 120 45% 34%; /* hijau muda */
-    --status-ready: 152 72% 21%; /* hijau tua */
-    --status-reported: 25 90% 38%; /* oranye */
-    --status-archived: 215 15% 42%; /* abu-abu */
+    --status-draft: 32 95% 34%; /* amber — "belum dikerjakan" */
+    --status-complete: 226 71% 40%; /* biru — data lengkap, netral */
+    --status-ready: 163 94% 24%; /* zamrud — siap, positif */
+    --status-reported: 263 69% 42%; /* ungu — selesai sepenuhnya */
+    --status-archived: 215 15% 42%; /* abu-abu — nonaktif */
 
     /*
      * Kotak tanggal kalender yang sudah terisi kegiatan.
@@ -199,12 +208,12 @@
     --warning: 32 90% 55%;
     --info: 199 80% 55%;
 
-    /* Di latar gelap yang dibutuhkan sebaliknya: warna dinaikkan lightness-nya
-       supaya kontrasnya terhadap latar tetap tinggi. */
-    --status-draft: 45 95% 62%;
-    --status-complete: 120 50% 62%;
-    --status-ready: 152 55% 52%;
-    --status-reported: 25 95% 62%;
+    /* Sama lima rona kategorial di atas, dinaikkan lightness-nya untuk latar
+       navy gelap. */
+    --status-draft: 32 90% 55%;
+    --status-complete: 213 94% 68%;
+    --status-ready: 158 64% 52%;
+    --status-reported: 255 92% 76%;
     --status-archived: 215 15% 65%;
 
     /* Navy dinaikkan lightness-nya supaya tetap terpisah dari latar gelap;
