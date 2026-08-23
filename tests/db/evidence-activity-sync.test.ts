@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { db } from '@/db/database';
 import { activityRepository, evidenceRepository } from '@/db/repositories';
-import type { Activity, Evidence } from '@/types';
+import type { Activity, Evidence, PerformancePlan } from '@/types';
 
 afterEach(async () => {
   await db.activities.clear();
   await db.evidence.clear();
+  await db.performancePlans.clear();
 });
 
 function makeActivity(overrides: Partial<Activity> = {}): Activity {
@@ -31,6 +32,27 @@ function makeActivity(overrides: Partial<Activity> = {}): Activity {
     reportedAt: null,
     sentForReview: false,
     templateId: null,
+    createdAt: '2026-08-16T00:00:00.000Z',
+    updatedAt: '2026-08-16T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function makePlan(overrides: Partial<PerformancePlan> = {}): PerformancePlan {
+  return {
+    id: crypto.randomUUID(),
+    year: 2026,
+    type: 'Utama',
+    name: 'Rencana Kinerja Uji',
+    category: null,
+    keywords: [],
+    tags: [],
+    color: '#2563eb',
+    isActive: true,
+    isFavorite: false,
+    sortOrder: 0,
+    usageCount: 0,
+    lastUsedAt: null,
     createdAt: '2026-08-16T00:00:00.000Z',
     updatedAt: '2026-08-16T00:00:00.000Z',
     ...overrides,
@@ -88,6 +110,53 @@ describe('evidenceRepository.addForActivity (§9.6 sync)', () => {
 
     const updated = await db.activities.get(activity.id);
     expect(updated?.evidenceCount).toBe(0);
+  });
+});
+
+describe('evidence changes recompute activity status (bug fix: no longer requires opening the form)', () => {
+  it('flips complete -> ready_to_report when the last required evidence is added', async () => {
+    const plan = makePlan();
+    await db.performancePlans.add(plan);
+    const activity = makeActivity({
+      status: 'complete',
+      performancePlanId: plan.id,
+      description: 'Deskripsi kegiatan yang cukup panjang',
+      achievement: 'Capaian hasil kegiatan yang cukup panjang',
+      progress: 100,
+      evidenceLink: 'https://drive.google.com/bukti',
+      evidenceCount: 0,
+    });
+    await db.activities.add(activity);
+
+    await evidenceRepository.addForActivity(makeEvidence(activity.id));
+
+    const updated = await db.activities.get(activity.id);
+    expect(updated?.evidenceCount).toBe(1);
+    expect(updated?.status).toBe('ready_to_report');
+  });
+
+  it('flips ready_to_report -> complete when the only evidence is removed', async () => {
+    const plan = makePlan();
+    await db.performancePlans.add(plan);
+    const activity = makeActivity({
+      status: 'draft',
+      performancePlanId: plan.id,
+      description: 'Deskripsi kegiatan yang cukup panjang',
+      achievement: 'Capaian hasil kegiatan yang cukup panjang',
+      progress: 100,
+      evidenceLink: 'https://drive.google.com/bukti',
+      evidenceCount: 0,
+    });
+    await db.activities.add(activity);
+    const evidence = makeEvidence(activity.id);
+    await evidenceRepository.addForActivity(evidence);
+    expect((await db.activities.get(activity.id))?.status).toBe('ready_to_report');
+
+    await evidenceRepository.remove(evidence.id);
+
+    const updated = await db.activities.get(activity.id);
+    expect(updated?.evidenceCount).toBe(0);
+    expect(updated?.status).toBe('complete');
   });
 });
 

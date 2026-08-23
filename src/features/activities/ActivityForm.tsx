@@ -22,7 +22,7 @@ import { generateAchievementSuggestions } from '@/lib/matching/achievement-gener
 import { useEvidenceForActivity } from '@/hooks/useEvidenceForActivity';
 import { useSkpPeriod } from '@/hooks/useSkpPeriod';
 import { ReadyToReportChecklist } from './ReadyToReportChecklist';
-import { validateReadyToReport } from '@/lib/services/activity-validator';
+import { recomputeActivityStatus } from '@/lib/services/activity-status';
 import { ApplyTemplateControl } from './ApplyTemplateControl';
 import { SaveAsTemplateButton } from './SaveAsTemplateButton';
 
@@ -160,7 +160,7 @@ export function ActivityForm({
       void (async () => {
         if (!values.date) return;
         const current = await activityRepository.get(draftIdRef.current);
-        const activity = withRecomputedStatus(
+        const activity = await recomputeActivityStatus(
           buildActivityFromForm(
             { ...values, evidenceLink: values.evidenceLink || null },
             current ?? existing ?? ({ id: draftIdRef.current } as Activity)
@@ -174,72 +174,16 @@ export function ActivityForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(values), readOnly, isDirty]);
 
-  // §9.4: ready_to_report is only reached once §12.3 validation passes —
-  // and must be RE-checked on every save (not just when first entering it),
-  // or removing data afterward leaves a stale ready_to_report that no
-  // longer reflects reality. 'reported'/'archived' are deliberately
-  // excluded: those are manual markers (see unmarkActivityReported) that
-  // editing unrelated fields shouldn't silently undo. Shared by both
-  // autosave and explicit submit below — autosave used to skip this
-  // entirely, so an activity edited only via autosave (never re-submitted)
-  // could stay stuck on a stale status indefinitely.
-  //
-  // When not ready, the result is 'draft' or 'complete' depending on WHICH
-  // checks are failing: if the activity's own core content (date/time/RK/
-  // description/achievement/progress) is intact and only the report-
-  // readiness extras (evidence/link/period lock) are missing, 'complete' is
-  // accurate — the activity itself is done, it just isn't reportable yet.
-  // But if core content is missing (e.g. the user cleared the description),
-  // 'complete' would overstate it — that's 'draft'. Previously EVERY
-  // not-ready activity landed on 'complete', so clearing core data never
-  // sent a heavily-edited activity back to 'draft' the way a user expects.
-  const CORE_CONTENT_FIELDS = new Set([
-    'date',
-    'startTime',
-    'performancePlanId',
-    'description',
-    'achievement',
-    'progress',
-  ]);
-  function withRecomputedStatus(activity: Activity): Activity {
-    if (
-      activity.status !== 'draft' &&
-      activity.status !== 'complete' &&
-      activity.status !== 'ready_to_report'
-    ) {
-      return activity;
-    }
-    const validation = validateReadyToReport(
-      {
-        date: activity.date,
-        startTime: activity.startTime,
-        endTime: activity.endTime,
-        performancePlanId: activity.performancePlanId,
-        planExists: activity.performancePlanId
-          ? (plans ?? []).some((p) => p.id === activity.performancePlanId)
-          : false,
-        description: activity.description,
-        achievement: activity.achievement,
-        progress: activity.progress,
-        evidenceCount: activity.evidenceCount,
-        evidenceLink: activity.evidenceLink,
-      },
-      {
-        requireEvidenceForReady: settings?.requireEvidenceForReady ?? true,
-        requireEvidenceLinkForReady: settings?.requireEvidenceLinkForReady ?? true,
-        periodLocked: skpPeriodForChecklist?.isLocked ?? false,
-      }
-    );
-    if (validation.isReady) return { ...activity, status: 'ready_to_report' };
-    const coreContentOk = validation.checks
-      .filter((c) => CORE_CONTENT_FIELDS.has(c.field))
-      .every((c) => c.passed);
-    return { ...activity, status: coreContentOk ? 'complete' : 'draft' };
-  }
-
+  // §9.4: ready_to_report is only reached once §12.3 validation passes — and
+  // must be RE-checked on every save (not just when first entering it), or
+  // removing data afterward leaves a stale ready_to_report that no longer
+  // reflects reality. recomputeActivityStatus (src/lib/services/activity-
+  // status.ts) is the single shared implementation — it's also called from
+  // evidence.repository.ts when evidence is added/removed, which changes
+  // Ready-to-Report eligibility without ever touching this form at all.
   async function onSubmit(formValues: ActivityEditFormValues) {
     const current = await activityRepository.get(draftIdRef.current);
-    const activity = withRecomputedStatus(
+    const activity = await recomputeActivityStatus(
       buildActivityFromForm(
         formValues,
         current ?? existing ?? ({ id: draftIdRef.current } as Activity)

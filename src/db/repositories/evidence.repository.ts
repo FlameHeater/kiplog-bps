@@ -1,4 +1,5 @@
 import { db } from '@/db/database';
+import { recomputeActivityStatus } from '@/lib/services/activity-status';
 import type { Evidence } from '@/types';
 
 async function syncActivityEvidenceCount(activityId: string, delta: number): Promise<void> {
@@ -12,9 +13,18 @@ async function syncActivityEvidenceCount(activityId: string, delta: number): Pro
   if (newCount > 0 && evidenceLinkStatus === 'none') evidenceLinkStatus = 'collected';
   if (newCount === 0 && evidenceLinkStatus === 'collected') evidenceLinkStatus = 'none';
 
+  // Adding/removing evidence can push an activity in or out of Ready-to-
+  // Report eligibility (evidence is one of the checks) — recompute status
+  // here too, not just in ActivityForm's own save path, or a status change
+  // caused purely by an evidence change stays stale until the user
+  // separately opens the form and clicks Simpan.
+  const withNewCount = { ...activity, evidenceCount: newCount, evidenceLinkStatus };
+  const { status } = await recomputeActivityStatus(withNewCount);
+
   await db.activities.update(activityId, {
     evidenceCount: newCount,
     evidenceLinkStatus,
+    status,
     updatedAt: new Date().toISOString(),
   });
 }
@@ -40,7 +50,12 @@ export const evidenceRepository = {
   // §9.6: evidenceCount/evidenceLinkStatus updated in the same transaction
   // as the evidence insert that caused them to change.
   async addForActivity(evidence: Evidence): Promise<void> {
-    await db.transaction('rw', db.evidence, db.activities, async () => {
+    // Widened beyond evidence+activities: syncActivityEvidenceCount calls
+    // recomputeActivityStatus, which reads settings/performancePlans/
+    // skpPeriods too — Dexie requires every table a transaction touches
+    // (even read-only) to be declared up front, or those reads throw
+    // NotFoundError once inside the callback.
+    await db.transaction('rw', db.evidence, db.activities, db.settings, db.performancePlans, db.skpPeriods, async () => {
       await db.evidence.add(evidence);
       if (evidence.activityId) {
         await syncActivityEvidenceCount(evidence.activityId, 1);
@@ -52,7 +67,8 @@ export const evidenceRepository = {
   },
   // Re-links an Inbox item to an activity (FR-INB-04), syncing the count.
   async assignToActivity(id: string, activityId: string): Promise<void> {
-    await db.transaction('rw', db.evidence, db.activities, async () => {
+    // Widened table set — see the comment on addForActivity above.
+    await db.transaction('rw', db.evidence, db.activities, db.settings, db.performancePlans, db.skpPeriods, async () => {
       await db.evidence.update(id, {
         activityId,
         inboxStatus: 'assigned',
@@ -62,7 +78,8 @@ export const evidenceRepository = {
     });
   },
   async remove(id: string): Promise<void> {
-    await db.transaction('rw', db.evidence, db.activities, async () => {
+    // Widened table set — see the comment on addForActivity above.
+    await db.transaction('rw', db.evidence, db.activities, db.settings, db.performancePlans, db.skpPeriods, async () => {
       const evidence = await db.evidence.get(id);
       await db.evidence.delete(id);
       if (evidence?.activityId) {
