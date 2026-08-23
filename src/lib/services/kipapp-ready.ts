@@ -48,6 +48,7 @@ export async function setPeriodLocked(
     isLocked,
     lockedAt: isLocked ? now : null,
     notes: existing?.notes,
+    defaultEvidenceLink: existing?.defaultEvidenceLink ?? null,
     updatedAt: now,
   });
 }

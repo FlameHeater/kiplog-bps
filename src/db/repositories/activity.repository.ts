@@ -11,6 +11,9 @@ export const activityRepository = {
   async listByDateRange(startDate: string, endDate: string): Promise<Activity[]> {
     return db.activities.where('date').between(startDate, endDate, true, true).toArray();
   },
+  async listBySkpPeriod(skpPeriod: string): Promise<Activity[]> {
+    return db.activities.where('skpPeriod').equals(skpPeriod).toArray();
+  },
   async get(id: string): Promise<Activity | undefined> {
     return db.activities.get(id);
   },

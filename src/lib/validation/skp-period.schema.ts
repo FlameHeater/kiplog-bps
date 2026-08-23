@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { KipAppStatusSchema } from './enums';
-import { IsoTimestampSchema, SkpPeriodStringSchema } from './primitives';
+import { IsoTimestampSchema, HttpUrlSchema, SkpPeriodStringSchema } from './primitives';
+
+// Empty string ("" from a blank input) means "not set", not an invalid URL —
+// same pattern as AppSettings.defaultDriveFolderUrl.
+const OptionalUrlSchema = z.preprocess((val) => (val === '' ? null : val), HttpUrlSchema.nullable());
 
 export const SkpPeriodSchema = z.object({
   id: SkpPeriodStringSchema, // "2026-08"
@@ -10,6 +14,11 @@ export const SkpPeriodSchema = z.object({
   isLocked: z.boolean().default(false),
   lockedAt: IsoTimestampSchema.nullable(),
   notes: z.string().optional(),
+  // FR — link bukti dukung "standar" satu bulan, dipakai untuk mengisi
+  // otomatis evidenceLink kegiatan baru di bulan itu (lihat
+  // src/lib/services/monthly-evidence-link.ts) dan mengisi kegiatan lama
+  // yang belum punya link saat pengguna menyimpannya.
+  defaultEvidenceLink: OptionalUrlSchema.default(null),
   updatedAt: IsoTimestampSchema,
 });
 

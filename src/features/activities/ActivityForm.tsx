@@ -80,6 +80,7 @@ export function ActivityForm({
     handleSubmit,
     watch,
     setValue,
+    getValues,
     reset,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<ActivityEditFormValues>({
@@ -110,6 +111,23 @@ export function ActivityForm({
   const [noTime, setNoTime] = useState(existing ? !existing.startTime && !existing.endTime : false);
   const evidenceForChecklist = useEvidenceForActivity(savedId);
   const skpPeriodForChecklist = useSkpPeriod(values.date ? values.date.slice(0, 7) : null);
+
+  // FR — otomatisasi link bukti dukung bulanan (lihat
+  // src/lib/services/monthly-evidence-link.ts): kalau bulan kegiatan ini
+  // punya link default tersimpan, isikan otomatis — tapi HANYA untuk
+  // kegiatan yang belum punya link sama sekali, dan HANYA kegiatan baru
+  // (tidak pernah menimpa kegiatan lama yang sedang diedit, apa pun isi
+  // link-nya sekarang). Berjalan lagi tiap kali tanggalnya berpindah bulan,
+  // bukan cuma sekali saat form dibuka.
+  useEffect(() => {
+    if (existing) return;
+    const defaultLink = skpPeriodForChecklist?.defaultEvidenceLink;
+    if (!defaultLink) return;
+    if (getValues('evidenceLink')) return;
+    setValue('evidenceLink', defaultLink, { shouldDirty: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skpPeriodForChecklist?.defaultEvidenceLink, existing]);
+
   const duration = (() => {
     try {
       return calculateDurationMinutes(values.startTime, values.endTime);

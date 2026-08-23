@@ -19,6 +19,7 @@ import { generateDataDukungPdf } from '@/lib/reporting/pdf-data-dukung';
 import { buildReportFilename } from '@/lib/reporting/filename';
 import { monthRangeContaining } from '@/lib/reporting/report-period';
 import { MonthPicker } from '@/components/common/MonthPicker';
+import { MonthlyEvidenceLinkCard } from '@/features/evidence/MonthlyEvidenceLinkCard';
 import { groupEvidenceByActivity } from '@/lib/services/evidence-grouping';
 import { downloadBlob } from '@/lib/utils/download-blob';
 import type { Activity, EvidenceLinkStatus } from '@/types';
@@ -188,6 +189,8 @@ export function BuktiTautanPage() {
       />
 
       {error ? <ErrorBanner message={error} onDismiss={() => setError(null)} /> : null}
+
+      <MonthlyEvidenceLinkCard />
 
       {activities.length === 0 ? (
         <EmptyState
